@@ -10,7 +10,7 @@ Every PR-sized backlog item must include `Git status` and `PR`. Use `Git status:
 
 ### PR01. Project Package And Quality Baseline
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/funder/pull/1.
+Git status: merged. PR: https://github.com/SergejSchweizer/funder/pull/1.
 
 Depends on: initial documentation baseline.
 
