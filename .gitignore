@@ -1,0 +1,44 @@
+# Ignore everything by default. Add explicit allowlist entries for files and
+# directories that are part of the project.
+*
+
+# Always allow Git ignore files.
+!.gitignore
+!**/.gitignore
+
+# Root project documentation.
+!AGENTS.md
+!ARCHITECTURE.md
+!BACKLOG.md
+!DECISIONS.md
+!README.md
+!RISKS.md
+
+# Public examples are allowed; local secrets stay ignored.
+!.env.example
+
+# Project metadata and lockfiles.
+!pyproject.toml
+!uv.lock
+!requirements.txt
+!requirements-dev.txt
+!setup.cfg
+!setup.py
+
+# Source, tests, scripts, and docs must be explicitly project-owned.
+!src/
+!src/**
+!tests/
+!tests/**
+!scripts/
+!scripts/**
+!docs/
+!docs/**
+
+# Keep local-only files ignored even if a broader allowlist is added later.
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.py[cod]
