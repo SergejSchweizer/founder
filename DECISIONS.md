@@ -92,6 +92,8 @@ Update trigger: Revisit if discovery and fetch are moved behind a shared orchest
 
 Date: 2026-07-12
 
+Status: Superseded by D009.
+
 Context: The project needs repeatable checks before implementing Search, Fetch, and lake-writing behavior.
 
 Decision: Use Ruff, Mypy, Pytest, pre-commit, and a GitHub Actions `quality` workflow as the baseline quality gate. Protect `main` with the same workflow once the baseline is merged.
@@ -99,6 +101,18 @@ Decision: Use Ruff, Mypy, Pytest, pre-commit, and a GitHub Actions `quality` wor
 Consequences: Development changes should pass the local pre-commit hooks before push, and repository changes should keep workflow, README commands, and backlog status aligned.
 
 Update trigger: Revisit if the project adopts additional checks such as coverage thresholds, security scanning, import-linter, or architecture rules.
+
+## D009. Keep Quality Gates Local And Out Of `.github`
+
+Date: 2026-07-12
+
+Context: The repository should not track a `.github` workflow directory, while local checks still need to remain repeatable.
+
+Decision: Keep Ruff, Mypy, Pytest, and pre-commit as the baseline local quality gate, but do not track GitHub Actions workflow files under `.github`.
+
+Consequences: Branch protection must not require a GitHub Actions `quality` status check unless a workflow is reintroduced. Contributors should run `uv run pre-commit run --all-files` locally before opening or merging changes.
+
+Update trigger: Revisit if repository-hosted CI is reintroduced or another external quality gate replaces local-only checks.
 
 ## Update Rules
 
