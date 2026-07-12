@@ -1,0 +1,29 @@
+{
+  "missing_review_count": 0,
+  "tracked_docs": {
+    "AGENTS.md": {
+      "exists": true,
+      "review": "Last reviewed: 2026-07-12"
+    },
+    "ARCHITECTURE.md": {
+      "exists": true,
+      "review": "Last reviewed: 2026-07-12"
+    },
+    "BACKLOG.md": {
+      "exists": true,
+      "review": "Last reviewed: 2026-07-12"
+    },
+    "DECISIONS.md": {
+      "exists": true,
+      "review": "Last reviewed: 2026-07-12"
+    },
+    "README.md": {
+      "exists": true,
+      "review": "Last reviewed: 2026-07-12"
+    },
+    "RISKS.md": {
+      "exists": true,
+      "review": "Last reviewed: 2026-07-12"
+    }
+  }
+}

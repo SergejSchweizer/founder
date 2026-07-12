@@ -42,7 +42,7 @@ Status: Active
 
 Signal: README coverage statistics and missing-day details have been refreshed several times.
 
-Mitigation: Regenerate or explicitly date coverage snapshots when lake content, dataset names, or coverage reporting changes.
+Mitigation: Regenerate or explicitly date coverage snapshots when lake content, dataset names, or coverage reporting changes. Use `uv run founder-docs-refresh` to write the tracked documentation review report before finalizing docs-heavy changes.
 
 ## R006. ETF Universe Discovery Can Be Incomplete or Duplicated
 
@@ -58,7 +58,7 @@ Status: Active
 
 Signal: The project goal depends on covariance estimates from thousands of ETF EOD quote histories.
 
-Mitigation: Validate quote-history coverage, missing dates, duplicate listings, currency effects, stale prices, Gold return/covariance inputs, and optimization constraints before publishing portfolio weights.
+Mitigation: Validate quote-history coverage, missing dates, duplicate listings, currency effects, stale prices, Gold return/covariance inputs, explicit optimization constraints, and Flatex export assumptions before publishing portfolio weights.
 
 ## R008. Search And Fetch Contract Drift Can Corrupt The Lake
 

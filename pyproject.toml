@@ -12,6 +12,7 @@ dependencies = []
 
 [project.scripts]
 founder = "founder.cli:main"
+founder-docs-refresh = "founder.docs_refresh:main"
 founder-quality = "founder.quality:main"
 
 [dependency-groups]
