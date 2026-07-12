@@ -1,4 +1,6 @@
+import csv
 from datetime import UTC, date, datetime
+from pathlib import Path
 
 import pytest
 
@@ -96,6 +98,33 @@ def test_search_writes_candidates_selects_canonical_and_approves_universe(tmp_pa
     assert canonical[1]["selection_reason"] == "fallback_exchange"
     assert read_json(paths.search_summary("search-1"))["missing_isin_rows"] == 1
     assert resolve_current_universe(paths).as_posix() == pointer["canonical_universe_path"]
+
+
+def test_search_ucits_etf_dataset_finds_expected_fund_counts(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    paths = LakePaths(root=tmp_path / "lake")
+    dataset = Path("docs/eodhd_ucits_etf_matches.csv")
+
+    with dataset.open(encoding="utf-8", newline="") as csv_file:
+        raw = [row for row in csv.DictReader(csv_file) if "ucits etf" in row["name"].casefold()]
+
+    candidates = write_search_run(
+        raw,
+        paths=paths,
+        search_run_id="search-ucits-etf",
+        query="UCITS ETF",
+        run_date=date(2026, 7, 12),
+        found_at=datetime(2026, 7, 12, tzinfo=UTC),
+    )
+    canonical = write_canonical_universe(paths, "search-ucits-etf")
+
+    assert len(candidates) == 8_165
+    assert len(canonical) == 3_104
+    assert read_json(paths.search_summary("search-ucits-etf")) == {
+        "candidate_rows": 8_165,
+        "canonical_rows": 3_104,
+        "missing_isin_rows": 1_505,
+        "search_run_id": "search-ucits-etf",
+    }
 
 
 def test_fetch_plan_quotes_fundamentals_and_coverage(tmp_path) -> None:  # type: ignore[no-untyped-def]

@@ -2,7 +2,15 @@
 
 Last reviewed: 2026-07-12
 
+## Table Of Contents
+
+- [Layers](#layers)
+- [Core Tables](#core-tables)
+- [How This Fits The Onboarding Flow](#how-this-fits-the-onboarding-flow)
+
 Founder uses deterministic local lake artifacts under a `LakePaths` root. The current implementation keeps runtime dependencies small by writing table rows as newline-delimited JSON through `founder.table_io` while preserving the table-oriented paths and schema names used by the backlog.
+
+Read this after [ARCHITECTURE.md](../ARCHITECTURE.md) and before changing Search, Fetch, Gold, or storage code. Read [docs/search_fetch_workflow.md](search_fetch_workflow.md) for executable examples that use these contracts.
 
 ## Layers
 
@@ -10,6 +18,8 @@ Founder uses deterministic local lake artifacts under a `LakePaths` root. The cu
 - Silver stores normalized search candidates, canonical universe rows, quote rows partitioned by year, and selected fundamentals profile rows.
 - Gold stores adjusted-close returns, correlation, and covariance rows.
 - Meta stores the active universe pointer, fetch plans, fetch runs, coverage, errors, and dry-run summaries.
+
+Runtime logs are intentionally outside the lake under `.logs/`. They are operational diagnostics, not dataset artifacts.
 
 ## Core Tables
 
@@ -22,9 +32,9 @@ Founder uses deterministic local lake artifacts under a `LakePaths` root. The cu
 - `errors`: non-secret fetch error records.
 - `returns`, `correlation`, and `covariance`: Gold risk-input tables built from validated Silver quote rows.
 
-## Dry Run
+## How This Fits The Onboarding Flow
 
-Run the deterministic mocked pipeline with:
+Use the deterministic mocked pipeline to see these contracts written end to end:
 
 ```bash
 uv run founder dry-run --root data/dry-run

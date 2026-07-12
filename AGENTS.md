@@ -1,8 +1,34 @@
-# Risks
+# Agent Workflow And Generated Risks
 
 Last reviewed: 2026-07-12
 
-This file is generated from recurring themes in first-parent `git log`.
+## Table Of Contents
+
+- [Project Workflow Rules](#project-workflow-rules)
+- [Generated Risk Context](#generated-risk-context)
+- [R001. Exchange API reliability can silently reduce historical completeness](#r001-exchange-api-reliability-can-silently-reduce-historical-completeness)
+- [R002. Dataset naming drift can break Bronze, Silver, and Gold joins](#r002-dataset-naming-drift-can-break-bronze-silver-and-gold-joins)
+- [R003. Large refactors can blur architecture boundaries](#r003-large-refactors-can-blur-architecture-boundaries)
+- [R004. Coverage and strict typing can drift after broad edits](#r004-coverage-and-strict-typing-can-drift-after-broad-edits)
+- [R005. Documentation snapshots can become stale relative to the lake](#r005-documentation-snapshots-can-become-stale-relative-to-the-lake)
+
+This file is the workflow reference for coding agents and maintainers. It should be read after [README.md](README.md), [ARCHITECTURE.md](ARCHITECTURE.md), and the task-specific docs for the area being changed.
+
+## Project Workflow Rules
+
+- Every PR-sized item recorded in `BACKLOG.md` must include a Git status and a PR link.
+- Use `Git status: not started` and `PR: TBD` until work begins.
+- Replace `PR: TBD` with the pull request URL once the PR exists.
+- Update the Git status as work moves through planned, in progress, pushed, merged, or blocked.
+- A PR that has run and passed `main-quality` counts as approved for merge.
+- `pr-quality` is the branch and PR feedback gate. It runs `uv run founder-quality pr`.
+- `main-quality` is the required merge gate. It runs `uv run founder-quality pr` plus `uv run pytest --cov=founder --cov-report=term-missing --cov-fail-under=95`.
+- GitHub branch protection should require `main-quality` and should not require a separate approving review when `main-quality` has passed.
+- Same-repository PRs with a passing `main-quality` workflow may be squash-merged automatically and have their branch deleted.
+
+## Generated Risk Context
+
+This section is generated from recurring themes in first-parent `git log`.
 
 Update command:
 
@@ -15,18 +41,6 @@ Risk review rules:
 - Update risks when commits introduce or retire operational, data correctness, or architecture risks.
 - Prefer concrete mitigations that map to tests, logs, contracts, or docs.
 - Keep stale risks only if the mitigation still needs active attention.
-
-# Project Workflow Rules
-
-- Every PR-sized item recorded in `BACKLOG.md` must include a Git status and a PR link.
-- Use `Git status: not started` and `PR: TBD` until work begins.
-- Replace `PR: TBD` with the pull request URL once the PR exists.
-- Update the Git status as work moves through planned, in progress, pushed, merged, or blocked.
-- A PR that has run and passed `main-quality` counts as approved for merge.
-- `pr-quality` is the branch and PR feedback gate. It runs `uv run founder-quality pr`.
-- `main-quality` is the required merge gate. It runs `uv run founder-quality pr` plus `uv run pytest --cov=founder --cov-report=term-missing --cov-fail-under=95`.
-- GitHub branch protection should require `main-quality` and should not require a separate approving review when `main-quality` has passed.
-- Same-repository PRs with a passing `main-quality` workflow may be squash-merged automatically and have their branch deleted.
 
 ## R001. Exchange API reliability can silently reduce historical completeness
 

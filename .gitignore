@@ -47,6 +47,7 @@
 .env.*
 !.env.example
 .venv/
+.logs/
 data/
 *.duckdb
 *.duckdb.wal

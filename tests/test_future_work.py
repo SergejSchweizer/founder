@@ -142,6 +142,7 @@ def test_universe_review_flags_missing_isins_currency_and_survivorship() -> None
 
 
 def test_docs_refresh_report_tracks_review_lines(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    (tmp_path / "docs").mkdir()
     for name in (
         "README.md",
         "ARCHITECTURE.md",
@@ -149,6 +150,8 @@ def test_docs_refresh_report_tracks_review_lines(tmp_path) -> None:  # type: ign
         "DECISIONS.md",
         "BACKLOG.md",
         "AGENTS.md",
+        "docs/lake_contracts.md",
+        "docs/search_fetch_workflow.md",
     ):
         (tmp_path / name).write_text("# Doc\n\nLast reviewed: 2026-07-12\n", encoding="utf-8")
     (tmp_path / "RISKS.md").write_text("# Risks\n", encoding="utf-8")
@@ -180,4 +183,4 @@ def test_docs_refresh_handles_missing_docs_and_cli(tmp_path, monkeypatch) -> Non
     main()
 
     assert output.exists()
-    assert build_docs_refresh_report(tmp_path)["missing_review_count"] == 6
+    assert build_docs_refresh_report(tmp_path)["missing_review_count"] == 8
