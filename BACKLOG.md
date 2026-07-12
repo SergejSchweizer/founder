@@ -166,10 +166,10 @@ Idempotency: The final dry run is safe to execute repeatedly in a clean workspac
 
 ## Future Work After Finalization
 
-- Define portfolio constraints for the first minimum-risk optimization run. Git status: in progress. PR: TBD.
-- Add Flatex-specific trade-preparation exports from portfolio weights. Git status: in progress. PR: TBD.
-- Add missing-ISIN review, currency handling, and survivorship-bias handling. Git status: in progress. PR: TBD.
-- Automate documentation refreshes for architecture, risks, decisions, README facts, and generated project-history summaries. Git status: in progress. PR: TBD.
+- Define portfolio constraints for the first minimum-risk optimization run. Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/6.
+- Add Flatex-specific trade-preparation exports from portfolio weights. Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/6.
+- Add missing-ISIN review, currency handling, and survivorship-bias handling. Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/6.
+- Automate documentation refreshes for architecture, risks, decisions, README facts, and generated project-history summaries. Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/6.
 
 ## Update Rules
 
