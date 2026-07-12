@@ -14,9 +14,7 @@
 !README.md
 !RISKS.md
 
-# Repository automation and local quality tooling.
-!.github/
-!.github/**
+# Local quality tooling.
 !.pre-commit-config.yaml
 !.python-version
 
@@ -45,6 +43,7 @@
 .env
 .env.*
 !.env.example
+.github/
 .venv/
 data/
 *.duckdb
