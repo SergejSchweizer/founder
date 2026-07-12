@@ -10,7 +10,7 @@ Every PR-sized backlog item must include `Git status` and `PR`. Use `Git status:
 
 ### PR01. Project Package And Quality Baseline
 
-Git status: not started. PR: TBD.
+Git status: in progress. PR: TBD.
 
 Depends on: initial documentation baseline.
 

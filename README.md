@@ -121,6 +121,30 @@ Subject to constraints that will be made explicit before implementation, such as
 - `DECISIONS.md` records durable technical decisions.
 - `AGENTS.md` stores generated project-history risk context.
 
+## Developer Quality Gates
+
+Install dependencies and run the local quality gate with:
+
+```bash
+uv sync --dev
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy src tests
+uv run pytest
+```
+
+Install the pre-commit hook with:
+
+```bash
+uv run pre-commit install
+```
+
+Run all hooks manually with:
+
+```bash
+uv run pre-commit run --all-files
+```
+
 ## Keep This README Up To Date
 
 Update this file whenever:

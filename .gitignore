@@ -14,6 +14,12 @@
 !README.md
 !RISKS.md
 
+# Repository automation and local quality tooling.
+!.github/
+!.github/**
+!.pre-commit-config.yaml
+!.python-version
+
 # Public examples are allowed; local secrets stay ignored.
 !.env.example
 
@@ -40,5 +46,11 @@
 .env.*
 !.env.example
 .venv/
+data/
+*.duckdb
+*.duckdb.wal
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
 __pycache__/
 *.py[cod]
