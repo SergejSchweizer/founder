@@ -18,6 +18,56 @@ The first supported data source is EODHD EOD Historical Data. Local API credenti
 - The largest match counts were on `XETRA`, `LSE`, `F`, `SW`, `PA`, `AS`, and `EUFUND`.
 - The generated discovery dataset is stored at `docs/eodhd_ucits_etf_matches.csv`.
 
+## ETF Discovery Statistics
+
+The `UCITS ETF` discovery set contains EODHD listings, not yet deduplicated portfolio instruments. Multiple exchange listings can share the same ISIN, so optimization must deduplicate or choose primary listings before building weights.
+
+- Total listings: 8,165.
+- Type split: 8,063 `ETF` rows and 102 `FUND` rows.
+- Exchanges represented: 26.
+- Countries represented: 21.
+- Currencies represented: 16.
+- Rows with ISIN: 6,660.
+- Rows missing ISIN: 1,505.
+- Unique non-empty ISINs: 3,104.
+
+Top exchanges by listing count:
+
+| Exchange | Listings |
+| --- | ---: |
+| XETRA | 2,569 |
+| LSE | 2,091 |
+| F | 1,123 |
+| SW | 1,038 |
+| PA | 570 |
+| AS | 291 |
+| PINK | 107 |
+| EUFUND | 102 |
+| MU | 73 |
+| OTCGREY | 62 |
+
+Top countries by listing count:
+
+| Country | Listings |
+| --- | ---: |
+| Germany | 3,860 |
+| UK | 2,091 |
+| Switzerland | 1,035 |
+| France | 574 |
+| Netherlands | 290 |
+| USA | 170 |
+| Unknown | 97 |
+
+Top currencies by listing count:
+
+| Currency | Listings |
+| --- | ---: |
+| EUR | 4,843 |
+| USD | 1,613 |
+| GBX | 628 |
+| GBP | 594 |
+| CHF | 428 |
+
 ## Intended Workflow
 
 1. Discover ETF and fund instruments from EODHD without committing credentials.
