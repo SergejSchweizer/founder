@@ -1,5 +1,7 @@
 # Risks
 
+Last reviewed: 2026-07-12
+
 This file is generated from recurring themes in first-parent `git log`.
 
 Update command:

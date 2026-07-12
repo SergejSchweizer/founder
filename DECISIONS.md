@@ -140,6 +140,18 @@ Consequences: Search, Fetch, coverage, fundamentals, Gold inputs, and dry runs c
 
 Update trigger: Revisit before publishing lake artifacts to consumers that require physical Parquet files.
 
+## D012. Keep Optimization Constraints And Trade Exports Separate
+
+Date: 2026-07-12
+
+Context: The project is moving from validated Gold risk inputs toward portfolio weights and broker-specific trade preparation.
+
+Decision: Keep portfolio constraint validation in `founder.portfolio`, universe review checks in `founder.universe_review`, and Flatex export shaping in `founder.trading`. Trade export helpers consume approved target weights, listing metadata, and prices; they do not compute the optimization objective or call broker APIs.
+
+Consequences: Optimization logic can evolve independently from Flatex formatting. Missing-ISIN, currency, and survivorship-bias review summaries stay visible before weights are trusted or exported.
+
+Update trigger: Revisit if a real optimizer, broker API integration, or multi-broker export format is added.
+
 ## Update Rules
 
 Add or update a decision when:

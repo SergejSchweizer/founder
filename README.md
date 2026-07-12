@@ -97,6 +97,7 @@ Top canonical exchanges after one-row-per-ISIN selection:
 6. Estimate return and risk inputs from validated quote history.
 7. Build minimum-risk portfolio weights under explicit constraints.
 8. Report weights, assumptions, coverage gaps, and validation results.
+9. Export approved target weights into Flatex trade-preparation rows.
 
 ## Portfolio Objective
 
@@ -214,6 +215,16 @@ Run all hooks manually with:
 ```bash
 uv run pre-commit run --all-files
 ```
+
+## Documentation Refresh
+
+Generate the tracked documentation review report with:
+
+```bash
+uv run founder-docs-refresh
+```
+
+The command writes `docs/docs_refresh_report.json` and reports which top-level project docs are present and whether their `Last reviewed:` marker is current enough to inspect manually.
 
 ## Keep This README Up To Date
 
