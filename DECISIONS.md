@@ -76,6 +76,18 @@ Consequences: Data ingestion should be designed around EODHD symbols, exchanges,
 
 Update trigger: Revisit if the market data subscription changes, Flatex is replaced, or execution constraints require a different canonical listing selection rule.
 
+## D007. Split Discovery And Data Loading Into Search And Fetch Modules
+
+Date: 2026-07-12
+
+Context: The project needs filtered name/ISIN discovery first, then full EODHD data loading for the approved canonical universe.
+
+Decision: Implement two clearly separated modules. Search produces versioned candidate and canonical-universe contracts. Fetch consumes only the approved canonical-universe contract and writes quote, mapping, fundamentals, coverage, and analytics data into the lake.
+
+Consequences: The module boundary must be enforced by schema validation and tests. Search must not fetch full histories, and Fetch must not perform fuzzy discovery. All PRs that alter the contract must update architecture, decisions, risks, and backlog entries together.
+
+Update trigger: Revisit if discovery and fetch are moved behind a shared orchestration framework or if a new provider requires a different contract boundary.
+
 ## Update Rules
 
 Add or update a decision when:

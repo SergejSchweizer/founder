@@ -15,9 +15,23 @@ This project analyzes EODHD end-of-day ETF quotes and builds minimum-risk fund p
 - **Validation**: Focused tests first, followed by full quality gates for behavior, typing, formatting, architecture boundaries, and coverage.
 - **Configuration**: Secrets and local credentials live in ignored local environment files such as `.env.local`.
 
+## Module Boundary
+
+- **Search module**: owns filtered EODHD discovery, candidate normalization, one-row-per-ISIN canonical selection, XETRA preference, review artifacts, and the active universe pointer.
+- **Fetch module**: owns canonical-universe validation, fetch planning, EOD quotes, identifier mapping, fundamentals, lake writes, coverage, and error manifests.
+- **Contract**: Fetch consumes only the Search module's approved `canonical_universe.parquet`; Fetch must not perform fuzzy discovery, and Search must not fetch full quote or fundamental history.
+
+## Simple Lake Layout
+
+- **Bronze**: raw or near-raw EODHD search, quote, mapping, and fundamentals payloads.
+- **Silver**: normalized candidates, canonical universe, quotes partitioned by year, selected fundamentals, coverage-ready tables.
+- **Gold**: portfolio-ready returns, correlation, covariance, risk inputs, and later portfolio weights.
+- **Meta**: active universe pointer, fetch runs, coverage, errors, and dataset version metadata.
+
 ## Boundaries
 
 - Discovery, fetch planning, checkpointing, retries, and completeness reporting belong near ingestion code.
+- Search and Fetch communicate through explicit versioned contracts, not shared mutable state.
 - Dataset names, lake paths, contracts, manifests, CLI choices, and tests must move together.
 - Transformation code should depend on explicit inputs and contracts, not hidden global state.
 - Optimization code should consume validated quote history and explicit constraints, not raw API responses.

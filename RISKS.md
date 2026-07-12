@@ -60,6 +60,14 @@ Signal: The project goal depends on covariance estimates from thousands of ETF E
 
 Mitigation: Validate quote-history coverage, missing dates, duplicate listings, currency effects, stale prices, and optimization constraints before publishing portfolio weights.
 
+## R008. Search And Fetch Contract Drift Can Corrupt The Lake
+
+Status: Active
+
+Signal: The Search module selects the canonical universe, while the Fetch module will store full data for every selected ISIN.
+
+Mitigation: Keep the module boundary contract versioned and tested. Fetch must reject duplicate ISINs, missing ISINs, missing symbols, and schema mismatches before writing lake data.
+
 ## Update Rules
 
 Update this file whenever:
