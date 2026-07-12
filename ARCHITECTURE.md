@@ -4,21 +4,23 @@ Last reviewed: 2026-07-12
 
 ## Purpose
 
-This project collects, transforms, and validates market data across Bronze, Silver, and Gold layers. The architecture should keep data ingestion, storage contracts, transformation logic, and validation gates separated so changes can be tested locally and reviewed safely.
+This project analyzes EODHD end-of-day ETF quotes and builds minimum-risk fund portfolio weights. The architecture should keep instrument discovery, quote ingestion, storage contracts, transformation logic, optimization, and validation gates separated so changes can be tested locally and reviewed safely.
 
 ## Current Shape
 
-- **Bronze**: Raw exchange/API ingestion and lake persistence.
-- **Silver**: Normalized datasets with registry-backed names, schemas, and contracts.
-- **Gold**: Feature-ready datasets and regime/analytics outputs derived from Silver inputs.
+- **Discovery**: EODHD search and exchange symbol-list enumeration identify ETF and fund universes by ticker, name, ISIN, exchange, and type.
+- **Bronze**: Raw EODHD API responses and quote ingestion outputs.
+- **Silver**: Normalized ETF quote and instrument datasets with stable identifiers, schema checks, and coverage metadata.
+- **Gold**: Portfolio-ready return, covariance, risk, and optimized-weight datasets derived from validated Silver inputs.
 - **Validation**: Focused tests first, followed by full quality gates for behavior, typing, formatting, architecture boundaries, and coverage.
 - **Configuration**: Secrets and local credentials live in ignored local environment files such as `.env.local`.
 
 ## Boundaries
 
-- Fetch planning, checkpointing, retries, and completeness reporting belong near ingestion code.
+- Discovery, fetch planning, checkpointing, retries, and completeness reporting belong near ingestion code.
 - Dataset names, lake paths, contracts, manifests, CLI choices, and tests must move together.
 - Transformation code should depend on explicit inputs and contracts, not hidden global state.
+- Optimization code should consume validated quote history and explicit constraints, not raw API responses.
 - Documentation snapshots must state their review date or be regenerated from source data.
 
 ## Update Rules

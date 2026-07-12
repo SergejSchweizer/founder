@@ -44,6 +44,22 @@ Signal: README coverage statistics and missing-day details have been refreshed s
 
 Mitigation: Regenerate or explicitly date coverage snapshots when lake content, dataset names, or coverage reporting changes.
 
+## R006. ETF Universe Discovery Can Be Incomplete or Duplicated
+
+Status: Active
+
+Signal: EODHD Search API is capped at 500 results, while exchange symbol-list enumeration found 8,165 instruments with `UCITS ETF` in the name across ETF and fund types.
+
+Mitigation: Use exchange enumeration for broad discovery, record the checked exchange count, deduplicate by symbol/exchange/ISIN/name, and validate outputs before quote ingestion.
+
+## R007. Minimum-Risk Weights Can Be Misleading Without Clean Quote Inputs
+
+Status: Active
+
+Signal: The project goal depends on covariance estimates from thousands of ETF EOD quote histories.
+
+Mitigation: Validate quote-history coverage, missing dates, duplicate listings, currency effects, stale prices, and optimization constraints before publishing portfolio weights.
+
 ## Update Rules
 
 Update this file whenever:

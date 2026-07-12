@@ -28,6 +28,30 @@ Consequences: Changes that affect architecture, risk, planned work, or durable t
 
 Update trigger: Revisit if these docs move into generated documentation or a different project governance system.
 
+## D003. Use EODHD as the First ETF Quote Source
+
+Date: 2026-07-12
+
+Context: The project goal is to analyze end-of-day quotes for multiple thousands of ETFs and build minimum-risk portfolio weights.
+
+Decision: Use EODHD EOD Historical Data as the first data source for ETF discovery and quote ingestion. Use exchange symbol-list enumeration for broad universe discovery because the Search API is capped at 500 results.
+
+Consequences: Discovery code must handle multiple exchanges, duplicate listings, ETF and fund type filters, and token-free outputs. Quote ingestion must validate coverage before optimization consumes the data.
+
+Update trigger: Revisit if another provider becomes primary, EODHD endpoint behavior changes, or the universe definition moves away from ETF/fund instruments.
+
+## D004. Start With Minimum-Risk Portfolio Optimization
+
+Date: 2026-07-12
+
+Context: The first product goal is optimal portfolio weighting based on minimal risk.
+
+Decision: Start with minimum-variance portfolio optimization over validated ETF return histories, then add constraints explicitly as project requirements mature.
+
+Consequences: The implementation needs clean return series, covariance estimation, duplicate instrument handling, and documented constraints before weights are trusted.
+
+Update trigger: Revisit if the objective changes to risk parity, target return, maximum Sharpe ratio, drawdown minimization, or multi-objective optimization.
+
 ## Update Rules
 
 Add or update a decision when:

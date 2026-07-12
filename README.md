@@ -1,0 +1,63 @@
+# Funder
+
+Last reviewed: 2026-07-12
+
+Funder is a fund portfolio builder for exchange-traded funds. The project goal is to analyze EODHD end-of-day quotes for multiple thousands of ETFs and build minimum-risk fund portfolio weights.
+
+The first supported data source is EODHD EOD Historical Data. Local API credentials must stay in ignored environment files such as `.env.local`; never commit real tokens.
+
+## Current Facts
+
+- The local Python environment uses Python 3.14.5 in `.venv/`.
+- EODHD Search API supports lookup by ticker, company/fund name, or ISIN through `/api/search/{query_string}`.
+- EODHD Search API can filter by asset type with `type=etf` or `type=fund`, but each search response is capped at 500 results.
+- A complete broad lookup for names containing `UCITS ETF` requires enumerating EODHD exchange symbol lists and filtering locally.
+- The latest local EODHD enumeration checked 70 exchange codes.
+- The enumeration found 8,165 unique active instruments with `UCITS ETF` in the instrument name.
+- The result set contains 8,063 rows with type `ETF` and 102 rows with type `FUND`.
+- The largest match counts were on `XETRA`, `LSE`, `F`, `SW`, `PA`, `AS`, and `EUFUND`.
+- The generated discovery dataset is stored at `docs/eodhd_ucits_etf_matches.csv`.
+
+## Intended Workflow
+
+1. Discover ETF and fund instruments from EODHD without committing credentials.
+2. Fetch end-of-day quotes for the selected universe.
+3. Normalize quotes into a reproducible local dataset.
+4. Validate coverage, missing dates, currencies, identifiers, and duplicate listings.
+5. Estimate return and risk inputs from validated quote history.
+6. Build minimum-risk portfolio weights under explicit constraints.
+7. Report weights, assumptions, coverage gaps, and validation results.
+
+## Portfolio Objective
+
+The initial optimization objective is minimum portfolio variance:
+
+$$
+\min_w \; w^T \Sigma w
+$$
+
+Subject to constraints that will be made explicit before implementation, such as:
+
+- weights sum to 1;
+- long-only or bounded weights;
+- maximum concentration per ETF, issuer, currency, country, or asset class;
+- minimum quote-history coverage;
+- duplicate listing and duplicate ISIN handling.
+
+## Repository Docs
+
+- `ARCHITECTURE.md` describes project layers and boundaries.
+- `RISKS.md` tracks active technical, data, and operational risks.
+- `BACKLOG.md` tracks visible implementation work.
+- `DECISIONS.md` records durable technical decisions.
+- `AGENTS.md` stores generated project-history risk context.
+
+## Keep This README Up To Date
+
+Update this file whenever:
+
+- the project goal or portfolio objective changes;
+- the EODHD universe count or discovery method changes;
+- quote ingestion, validation, or optimization workflows are implemented;
+- tracked datasets, commands, or configuration conventions change;
+- architecture, risks, backlog, or decisions add facts that affect user-facing project understanding.
