@@ -88,6 +88,18 @@ Consequences: The module boundary must be enforced by schema validation and test
 
 Update trigger: Revisit if discovery and fetch are moved behind a shared orchestration framework or if a new provider requires a different contract boundary.
 
+## D008. Use Local And GitHub Quality Gates
+
+Date: 2026-07-12
+
+Context: The project needs repeatable checks before implementing Search, Fetch, and lake-writing behavior.
+
+Decision: Use Ruff, Mypy, Pytest, pre-commit, and a GitHub Actions `quality` workflow as the baseline quality gate. Protect `main` with the same workflow once the baseline is merged.
+
+Consequences: Development changes should pass the local pre-commit hooks before push, and repository changes should keep workflow, README commands, and backlog status aligned.
+
+Update trigger: Revisit if the project adopts additional checks such as coverage thresholds, security scanning, import-linter, or architecture rules.
+
 ## Update Rules
 
 Add or update a decision when:
