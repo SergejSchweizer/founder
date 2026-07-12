@@ -58,12 +58,6 @@ class LakePaths:
     def silver_quotes_year(self, year: int) -> Path:
         return self.silver / "quotes" / f"year={year}" / "quotes.parquet"
 
-    def bronze_fundamentals_run(self, run_date: str) -> Path:
-        return self.bronze / "eodhd" / "fundamentals" / f"run_date={run_date}"
-
-    def silver_fundamentals_profile(self) -> Path:
-        return self.silver / "fundamentals" / "profile.parquet"
-
     def fetch_runs(self) -> Path:
         return self.metadata / "fetch_runs.parquet"
 

@@ -9,7 +9,6 @@ from founder.fetch import (
     build_fetch_plan,
     build_gap_fetch_plan,
     build_quote_gap_rows,
-    fetch_fundamentals_to_silver,
     fetch_quotes_to_bronze,
     normalize_quote_rows,
     read_silver_quotes,
@@ -157,7 +156,7 @@ def test_search_ucits_etf_dataset_finds_expected_fund_counts(tmp_path) -> None: 
     }
 
 
-def test_fetch_plan_quotes_fundamentals_and_coverage(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_plan_quotes_and_coverage(tmp_path) -> None:  # type: ignore[no-untyped-def]
     paths = LakePaths(root=tmp_path / "lake")
     canonical = select_canonical(
         [
@@ -226,73 +225,11 @@ def test_fetch_plan_quotes_fundamentals_and_coverage(tmp_path) -> None:  # type:
         currency_by_isin={"IE1": "EUR", "IE2": "EUR"},
     )
     write_silver_quotes(paths, quotes)
-    profiles = fetch_fundamentals_to_silver(
-        paths,
-        plan,
-        run_date=date(2026, 7, 12),
-        fetcher=lambda item: {"General": {"Name": item["code"], "CurrencyCode": "EUR"}},
-    )
     coverage = write_fetch_manifests(paths, run_id="fetch-1", quote_rows=quotes)
 
     assert read_rows(paths.silver_quotes_year(2026)) == quotes
-    assert profiles[0]["name"] == "AAA"
     assert build_coverage(quotes, run_id="fetch-1")[0]["missing_periods"] == 1
     assert read_rows(paths.coverage()) == coverage
-
-
-def test_fundamentals_failures_are_logged_without_stopping_fetch(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
-    paths = LakePaths(root=tmp_path / "lake")
-    plan = build_fetch_plan(
-        [
-            {
-                "search_run_id": "search-1",
-                "isin": "IE1",
-                "code": "AAA",
-                "exchange": "XETRA",
-                "instrument_type": "ETF",
-                "country": "DE",
-                "currency": "EUR",
-                "name": "A",
-                "normalized_name": "a",
-                "selection_reason": "highest_liquidity",
-                "selected_for_fetch": True,
-            },
-            {
-                "search_run_id": "search-1",
-                "isin": "IE2",
-                "code": "BBB",
-                "exchange": "XETRA",
-                "instrument_type": "ETF",
-                "country": "DE",
-                "currency": "EUR",
-                "name": "B",
-                "normalized_name": "b",
-                "selection_reason": "highest_liquidity",
-                "selected_for_fetch": True,
-            },
-        ],
-        run_id="fetch-1",
-        start_date=None,
-        end_date=date(2026, 7, 12),
-    )
-
-    profiles = fetch_fundamentals_to_silver(
-        paths,
-        plan,
-        run_date=date(2026, 7, 12),
-        fetcher=lambda item: (
-            (_ for _ in ()).throw(RuntimeError("fundamentals unavailable"))
-            if item["code"] == "BBB"
-            else {"General": {"Name": "A", "CurrencyCode": "EUR"}}
-        ),
-    )
-
-    assert [profile["code"] for profile in profiles] == ["AAA"]
-    assert (
-        "fundamentals fetch failed symbol=BBB.XETRA error=fundamentals unavailable" in caplog.text
-    )
 
 
 def test_gap_plan_and_quote_writes_preserve_existing_history(tmp_path) -> None:  # type: ignore[no-untyped-def]

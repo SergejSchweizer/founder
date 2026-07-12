@@ -60,13 +60,13 @@ EODHD search or exchange-symbol-list rows
 - Fetch reads only the approved canonical universe contract.
 - Fetch plans symbols, archives raw or near-raw Bronze data, normalizes quotes, and writes coverage manifests.
 
-Search must not fetch historical quote or fundamental payloads. Fetch must not perform fuzzy discovery. The handoff is the `canonical_universe` table and the `current_universe.json` pointer.
+Search must not fetch historical quote payloads. Fetch must not perform fuzzy discovery. The handoff is the `canonical_universe` table and the `current_universe.json` pointer.
 
 ## Module Responsibilities
 
 `founder.search` is the module to use when the input is still an instrument discovery result. It accepts raw EODHD-style candidate rows, normalizes names and identifiers, excludes rows without ISIN from fetch input, chooses one canonical listing per ISIN, writes a human-review CSV, and approves the final universe by writing `current_universe.json`.
 
-`founder.fetch` is the module to use after a universe has been approved. It reads the canonical-universe contract, validates required fields, derives EODHD symbols, writes a fetch plan, archives quote, fundamentals, dividends, and splits data into Bronze, normalizes quote rows into Silver, writes coverage manifests, and logs fetch errors to the run log.
+`founder.fetch` is the module to use after a universe has been approved. It reads the canonical-universe contract, validates required fields, derives EODHD symbols, writes a fetch plan, archives quote, dividends, and splits data into Bronze, normalizes quote rows into Silver, writes coverage manifests, and logs fetch errors to the run log.
 
 `founder.paths` is the module to use when code needs artifact locations. It keeps Search and Fetch from hard-coding lake paths and makes dry runs, tests, and local workspaces deterministic.
 
@@ -117,19 +117,19 @@ This writes raw candidates, normalized candidates, the canonical universe, a rev
 
 ### Run Fetch
 
-Run Fetch against the approved universe. By default, `founder fetch` calls EODHD for live end-of-day quotes with gap-aware planning, downloads one fundamentals snapshot per approved listing, and archives the additional dated EODHD listing datasets currently supported by Founder. For first-time ISINs, quote fetching requests the full available history up to the run date by omitting `from` and sending `to=<run-date>`:
+Run Fetch against the approved universe. By default, `founder fetch` calls EODHD for live end-of-day quotes with gap-aware planning and archives the additional dated EODHD listing datasets currently supported by Founder. For first-time ISINs, quote fetching requests the full available history up to the run date by omitting `from` and sending `to=<run-date>`:
 
 ```bash
 uv run founder fetch
 ```
 
-`--mock` writes deterministic local quote and fundamentals outputs without using an EODHD token:
+`--mock` writes deterministic local quote outputs without using an EODHD token:
 
 ```bash
 uv run founder fetch --mock
 ```
 
-Without `--mock`, `founder fetch` writes the fetch plan, archives live Bronze quote rows, normalizes Silver quotes, archives live Bronze fundamentals, dividends, and splits rows, writes Silver fundamentals profiles, and writes coverage rows. With `--mock`, it writes deterministic local quote, fundamentals, coverage, and fetch-run metadata. Optional flags such as `--root`, `--run-id`, `--start-date`, `--end-date`, `--run-date`, `--limit`, and `--isin` are available for reproducible custom runs, but they are not required.
+Without `--mock`, `founder fetch` writes the fetch plan, archives live Bronze quote rows, normalizes Silver quotes, archives live Bronze dividends and splits rows, and writes coverage rows. With `--mock`, it writes deterministic local quote, coverage, and fetch-run metadata. Optional flags such as `--root`, `--run-id`, `--start-date`, `--end-date`, `--run-date`, `--limit`, and `--isin` are available for reproducible custom runs, but they are not required.
 
 Pass `--start-date` and/or `--end-date` only when you want to restrict the EODHD history window:
 
@@ -145,7 +145,7 @@ uv run founder fetch
 
 When you pass `--start-date`, Fetch uses that manual date window instead of automatic gap planning. ISINs without existing local quotes are still included and fetch full history up to the selected end date. Quote gaps are written to `lake/silver/coverage/quote_gaps.parquet`; after a successful gap backfill this table should shrink or become empty for the covered ISINs.
 
-This automatic gap planning is quote-specific. Quotes are dated time-series rows, so Fetch can compare expected trading days with stored Silver quote dates and build missing windows. Fundamentals are snapshot/profile data: their full payloads are archived in Bronze once per listing, and the current Silver profile table merges by ISIN, code, and exchange. Dividends and splits are archived as dated Bronze Parquet rows under `lake/bronze/{dataset}/{exchange}/{year}/{ISIN}.parquet`, matching the quote path shape. They do not use quote-style historical gap windows yet. Any future ISIN data type, such as holdings, NAV, or factor series, should define its own coverage fields, gap table, and merge key before being added to automatic gap planning.
+This automatic gap planning is quote-specific. Quotes are dated time-series rows, so Fetch can compare expected trading days with stored Silver quote dates and build missing windows. Dividends and splits are archived as dated Bronze Parquet rows under `lake/bronze/{dataset}/{exchange}/{year}/{ISIN}.parquet`, matching the quote path shape. They do not use quote-style historical gap windows yet. Any future ISIN data type, such as holdings, NAV, or factor series, should define its own coverage fields, gap table, and merge key before being added to automatic gap planning.
 
 Use `--limit N` to restrict Fetch to the first `N` approved canonical ISINs, or `--isin` to restrict Fetch to one exact approved canonical ISIN. These two selectors are mutually exclusive:
 
@@ -169,11 +169,11 @@ Use the dry run when you want Search, Fetch, and Gold together from built-in sam
 uv run founder dry-run --root lake
 ```
 
-The dry run writes candidates, a canonical universe, an approved universe pointer, a fetch plan, quote rows, fundamentals profiles, coverage, and Gold inputs under the selected root.
+The dry run writes candidates, a canonical universe, an approved universe pointer, a fetch plan, quote rows, coverage, and Gold inputs under the selected root.
 
 ### Run From Python
 
-Use Python when you need custom fetchers or want to embed Search and Fetch in another workflow. This copy-paste command uses mocked quote and fundamentals payloads, so it does not need an EODHD token:
+Use Python when you need custom fetchers or want to embed Search and Fetch in another workflow. This copy-paste command uses mocked quote payloads, so it does not need an EODHD token:
 
 ```bash
 uv run python - <<'PY'
@@ -181,7 +181,6 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 from founder.fetch import (
-    fetch_fundamentals_to_silver,
     fetch_quotes_to_bronze,
     normalize_quote_rows,
     write_fetch_manifests,
@@ -255,12 +254,6 @@ quotes = normalize_quote_rows(
     currency_by_isin={"IE0000000001": "EUR"},
 )
 write_silver_quotes(paths, quotes)
-fetch_fundamentals_to_silver(
-    paths,
-    plan,
-    run_date=run_date,
-    fetcher=lambda item: {"General": {"Name": item["code"], "CurrencyCode": "EUR"}},
-)
 coverage = write_fetch_manifests(paths, run_id=fetch_run_id, quote_rows=quotes)
 
 print({"plan_rows": len(plan), "quote_rows": len(quotes), "coverage_rows": len(coverage)})
@@ -405,21 +398,6 @@ coverage = write_fetch_manifests(paths, run_id="fetch-2026-07-12", quote_rows=qu
 
 Normalization deduplicates by `(isin, exchange, code, date)`, defaults missing OHLC values from `close`, and writes UTC timestamps. Coverage records first and last quote dates, observed rows, missing calendar periods, and the next fetch start with an overlap window.
 
-### Fetch Fundamentals
-
-```python
-from founder.fetch import fetch_fundamentals_to_silver
-
-profiles = fetch_fundamentals_to_silver(
-    paths,
-    plan,
-    run_date=date(2026, 7, 12),
-    fetcher=lambda item: {"General": {"Name": item["code"], "CurrencyCode": "EUR"}},
-)
-```
-
-The full fundamentals payload is archived in Bronze. Silver currently stores the minimal profile fields needed for review, filtering, and later trade preparation.
-
 ## End-To-End Example
 
 The fastest way to see the full Search-to-Fetch-to-Gold path is the mocked dry run:
@@ -440,7 +418,6 @@ The dry run requires no EODHD token. It writes deterministic sample artifacts an
 | Fetch plan | `write_fetch_plan` | Silver metadata fetch plan |
 | Quote archive | `fetch_quotes_to_bronze` | Bronze quote payloads, error rows |
 | Quote normalization | `normalize_quote_rows`, `write_silver_quotes` | Silver quotes partitioned by year |
-| Fundamentals | `fetch_fundamentals_to_silver` | Bronze fundamentals, Silver profile rows |
 | Additional EODHD data | `fetch_raw_eodhd_datasets_to_bronze` | Bronze dividends and splits rows |
 | Coverage | `write_fetch_manifests` | Coverage rows, fetch-run manifest, coverage CSV |
 

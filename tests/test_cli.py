@@ -17,8 +17,6 @@ class FakeEodhdClient:
 
     def get_json(self, path: str, params: dict[str, str | int | float] | None = None) -> Any:
         self.requests.append((path, params))
-        if path.startswith("/fundamentals/"):
-            return [{"General": {"Name": "Example UCITS ETF", "CurrencyCode": "EUR"}}][0]
         if path.startswith("/div/"):
             return [{"date": "2025-12-15", "value": 0.12}]
         if path.startswith("/splits/"):
@@ -231,13 +229,11 @@ def test_cli_fetch_live_defaults_to_gap_aware_full_history(
 
     fetch_output = capsys.readouterr()
     assert '"fetch_plan_rows": 1' in fetch_output.out
-    assert '"fundamental_profiles": 1' in fetch_output.out
     assert '"gap_aware": true' in fetch_output.out
     assert '"quote_rows": 2' in fetch_output.out
     assert '"raw_data_payloads": 2' in fetch_output.out
     assert FakeEodhdClient.requests == [
         ("/eod/EXAMPLE.XETRA", {"fmt": "json", "to": "2026-07-12"}),
-        ("/fundamentals/EXAMPLE.XETRA", {"fmt": "json"}),
         ("/div/EXAMPLE.XETRA", {"fmt": "json", "to": "2026-07-12"}),
         ("/splits/EXAMPLE.XETRA", {"fmt": "json", "to": "2026-07-12"}),
     ]
@@ -247,10 +243,6 @@ def test_cli_fetch_live_defaults_to_gap_aware_full_history(
     assert plan_row["end_date"] == "2026-07-12"
     assert plan_row["window_reason"] == "full_history"
     assert len(read_rows(paths.coverage())) == 1
-    assert read_rows(paths.silver_fundamentals_profile())[0]["name"] == "Example UCITS ETF"
-    assert read_json(paths.bronze_fundamentals_run("2026-07-12") / "EXAMPLE.XETRA.json") == {
-        "General": {"Name": "Example UCITS ETF", "CurrencyCode": "EUR"}
-    }
     dividends_path = paths.bronze_dataset_file("dividends", "XETRA", 2025, "IE0000000001")
     splits_path = paths.bronze_dataset_file("splits", "XETRA", 2026, "IE0000000001")
     assert read_rows(dividends_path) == [
@@ -341,7 +333,6 @@ def test_cli_fetch_manual_start_date_bypasses_gap_aware_planning(
     assert '"gap_aware": false' in fetch_output.out
     assert FakeEodhdClient.requests == [
         ("/eod/EXAMPLE.XETRA", {"fmt": "json", "from": "2026-07-01", "to": "2026-07-13"}),
-        ("/fundamentals/EXAMPLE.XETRA", {"fmt": "json"}),
         ("/div/EXAMPLE.XETRA", {"fmt": "json", "to": "2026-07-12"}),
         ("/splits/EXAMPLE.XETRA", {"fmt": "json", "to": "2026-07-12"}),
     ]
@@ -407,7 +398,6 @@ def test_cli_fetch_defaults_to_gap_aware_windows(
     assert FakeEodhdClient.requests == [
         ("/eod/EXAMPLE.XETRA", {"fmt": "json", "from": "2020-01-03", "to": "2026-07-10"}),
         ("/eod/EXAMPLE.XETRA", {"fmt": "json", "from": "2026-07-13", "to": "2026-07-13"}),
-        ("/fundamentals/EXAMPLE.XETRA", {"fmt": "json"}),
         ("/div/EXAMPLE.XETRA", {"fmt": "json", "to": "2026-07-13"}),
         ("/splits/EXAMPLE.XETRA", {"fmt": "json", "to": "2026-07-13"}),
     ]
@@ -482,7 +472,6 @@ def test_cli_fetch_still_fetches_non_quote_data_when_quote_plan_is_empty(
     assert '"fetch_plan_rows": 0' in fetch_output.out
     assert '"raw_data_payloads": 2' in fetch_output.out
     assert FakeEodhdClient.requests == [
-        ("/fundamentals/EXAMPLE.XETRA", {"fmt": "json"}),
         ("/div/EXAMPLE.XETRA", {"fmt": "json", "to": "2026-07-12"}),
         ("/splits/EXAMPLE.XETRA", {"fmt": "json", "to": "2026-07-12"}),
     ]

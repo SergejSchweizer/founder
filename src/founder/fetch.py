@@ -2,7 +2,7 @@
 
 The Fetch module starts at Search's approved `canonical_universe` contract. It
 validates that contract, derives EODHD symbols, records raw or near-raw Bronze
-quote/fundamental and other EODHD data, normalizes quote rows for Silver, and
+quote and other EODHD data, normalizes quote rows for Silver, and
 logs non-secret errors, and writes Silver metadata manifests that show coverage. It
 does not perform fuzzy instrument discovery.
 """
@@ -18,10 +18,9 @@ from founder.http import EodhdClient
 from founder.logging import get_logger
 from founder.paths import LakePaths
 from founder.schemas import required_fields
-from founder.table_io import JsonRow, read_rows, write_csv, write_json, write_rows
+from founder.table_io import JsonRow, read_rows, write_csv, write_rows
 
 QuoteFetcher = Callable[[Mapping[str, Any]], Sequence[Mapping[str, Any]]]
-FundamentalsFetcher = Callable[[Mapping[str, Any]], Mapping[str, Any]]
 RawDataFetcher = Callable[[Mapping[str, Any]], Any]
 LOGGER = get_logger(__name__)
 
@@ -414,18 +413,6 @@ def eodhd_quote_fetcher(client: EodhdClient) -> QuoteFetcher:
     return fetch
 
 
-def eodhd_fundamentals_fetcher(client: EodhdClient) -> FundamentalsFetcher:
-    """Wrap `EodhdClient` as a `FundamentalsFetcher` for planned listings."""
-
-    def fetch(item: Mapping[str, Any]) -> Mapping[str, Any]:
-        payload = client.get_json(f"/fundamentals/{item['symbol']}", {"fmt": "json"})
-        if not isinstance(payload, Mapping):
-            raise ValueError("expected EODHD fundamentals object")
-        return payload
-
-    return fetch
-
-
 def eodhd_raw_data_fetcher(client: EodhdClient, endpoint: str) -> RawDataFetcher:
     """Wrap `EodhdClient` for raw per-symbol EODHD datasets."""
 
@@ -622,65 +609,6 @@ def read_silver_quotes(paths: LakePaths) -> list[JsonRow]:
     for path in sorted((paths.silver / "quotes").glob("year=*/quotes.parquet")):
         rows.extend(read_rows(path))
     return rows
-
-
-def fetch_fundamentals_to_silver(
-    paths: LakePaths,
-    plan: Sequence[Mapping[str, Any]],
-    *,
-    run_date: date,
-    fetcher: FundamentalsFetcher,
-) -> list[JsonRow]:
-    """Archive fundamentals payloads and write minimal Silver profile rows.
-
-    The full payload is kept in Bronze for auditability. Silver currently stores
-    only the stable profile fields needed by review, filtering, and later trade
-    preparation.
-    """
-    profiles: list[JsonRow] = []
-    errors: list[JsonRow] = []
-    for item in _unique_plan_listings(plan):
-        try:
-            payload = dict(fetcher(item))
-            write_json(
-                paths.bronze_fundamentals_run(run_date.isoformat()) / f"{item['symbol']}.json",
-                payload,
-            )
-            general = payload.get("General", {})
-            if not isinstance(general, dict):
-                general = {}
-            profiles.append(
-                {
-                    "run_id": str(item["run_id"]),
-                    "isin": str(item["isin"]),
-                    "code": str(item["code"]),
-                    "exchange": str(item["exchange"]),
-                    "name": str(general.get("Name", "")),
-                    "currency": str(general.get("CurrencyCode", "")),
-                }
-            )
-        except Exception as error:  # noqa: BLE001 - record and continue batch failures.
-            errors.append(
-                {
-                    "run_id": str(item["run_id"]),
-                    "code": str(item["code"]),
-                    "exchange": str(item["exchange"]),
-                    "endpoint": "fundamentals",
-                    "error_type": type(error).__name__,
-                    "message": str(error),
-                }
-            )
-            LOGGER.warning("fundamentals fetch failed symbol=%s error=%s", item["symbol"], error)
-    write_rows(
-        paths.silver_fundamentals_profile(),
-        _merge_rows(
-            read_rows(paths.silver_fundamentals_profile()),
-            profiles,
-            key_fields=("isin", "code", "exchange"),
-        ),
-    )
-    LOGGER.info("fundamentals profiles written rows=%s", len(profiles))
-    return profiles
 
 
 def build_coverage(

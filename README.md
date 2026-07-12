@@ -156,7 +156,7 @@ Search and Fetch have separate CLI calls. First run Search with the string to fi
 uv run founder search "UCITS ETF"
 ```
 
-Then run Fetch from the approved universe pointer. By default this fetches live EODHD quotes with gap-aware planning, one fundamentals snapshot per approved listing, and the additional raw EODHD listing datasets currently supported by Founder. For first-time ISINs, quote fetching requests the full available history up to the run date by omitting `from` and sending `to=<run-date>`:
+Then run Fetch from the approved universe pointer. By default this fetches live EODHD quotes with gap-aware planning and the additional raw EODHD listing datasets currently supported by Founder. For first-time ISINs, quote fetching requests the full available history up to the run date by omitting `from` and sending `to=<run-date>`:
 
 ```bash
 uv run founder fetch
@@ -170,9 +170,9 @@ uv run founder fetch
 
 Gap-aware Fetch reads existing Silver quote dates, expands each ISIN into the missing quote windows, and keeps first-time ISINs in the plan for full-history loading. Remaining quote gaps are recorded in `lake/silver/coverage/quote_gaps.parquet`.
 
-The gap-aware approach currently applies to quote history. Other ISIN data types are handled by their own storage contract. Fundamentals are snapshot/profile data archived under `lake/bronze/eodhd/fundamentals/` and merged by ISIN, code, and exchange in Silver. Dividends and splits are archived beside quotes as dated Bronze Parquet rows under `lake/bronze/dividends/{exchange}/{year}/{ISIN}.parquet` and `lake/bronze/splits/{exchange}/{year}/{ISIN}.parquet`. Additional time-series data types should get their own coverage and gap table before being added to automatic gap planning.
+The gap-aware approach currently applies to quote history. Other ISIN data types are handled by their own storage contract. Dividends and splits are archived beside quotes as dated Bronze Parquet rows under `lake/bronze/dividends/{exchange}/{year}/{ISIN}.parquet` and `lake/bronze/splits/{exchange}/{year}/{ISIN}.parquet`. Additional time-series data types should get their own coverage and gap table before being added to automatic gap planning.
 
-Use `--mock` for a local no-token run that writes deterministic quote, fundamentals, and coverage artifacts:
+Use `--mock` for a local no-token run that writes deterministic quote and coverage artifacts:
 
 ```bash
 uv run founder fetch --mock
@@ -197,7 +197,7 @@ Run the mocked end-to-end pipeline without credentials:
 uv run founder dry-run --root lake
 ```
 
-The dry run writes search candidates, a canonical universe, fetch plan, quote rows, fundamentals profiles, coverage manifests, and Gold return/correlation/covariance inputs under the selected local lake root.
+The dry run writes search candidates, a canonical universe, fetch plan, quote rows, coverage manifests, and Gold return/correlation/covariance inputs under the selected local lake root.
 
 ## EODHD Request Safety
 

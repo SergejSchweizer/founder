@@ -8,7 +8,6 @@ from typing import Any
 
 from founder.fetch import (
     build_fetch_plan,
-    fetch_fundamentals_to_silver,
     normalize_quote_rows,
     write_fetch_manifests,
     write_silver_quotes,
@@ -110,14 +109,6 @@ def run_dry_run(root: Path) -> JsonRow:
     quotes = normalize_quote_rows(plan, raw_by_symbol, fetched_at=now, currency_by_isin=currencies)
     write_silver_quotes(paths, quotes)
     coverage = write_fetch_manifests(paths, run_id=run_id, quote_rows=quotes)
-    profiles = fetch_fundamentals_to_silver(
-        paths,
-        plan,
-        run_date=date(2026, 7, 12),
-        fetcher=lambda item: {
-            "General": {"Name": str(item["code"]), "CurrencyCode": currencies[str(item["isin"])]}
-        },
-    )
     returns, correlations, covariances = write_gold_inputs(paths, quotes, as_of="2026-07-12")
     summary: JsonRow = {
         "search_run_id": search_run_id,
@@ -127,7 +118,6 @@ def run_dry_run(root: Path) -> JsonRow:
         "plan_rows": len(plan),
         "quote_rows": len(quotes),
         "coverage_rows": len(coverage),
-        "fundamental_profiles": len(profiles),
         "return_rows": len(returns),
         "correlation_rows": len(correlations),
         "covariance_rows": len(covariances),

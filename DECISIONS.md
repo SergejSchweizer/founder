@@ -103,7 +103,7 @@ Date: 2026-07-12
 
 Context: The project needs filtered name/ISIN discovery first, then full EODHD data loading for the approved canonical universe.
 
-Decision: Implement two clearly separated modules. Search produces versioned candidate and canonical-universe contracts. Fetch consumes only the approved canonical-universe contract and writes quote, mapping, fundamentals, coverage, and analytics data into the lake.
+Decision: Implement two clearly separated modules. Search produces versioned candidate and canonical-universe contracts. Fetch consumes only the approved canonical-universe contract and writes quote, mapping, coverage, and analytics data into the lake.
 
 Consequences: The module boundary must be enforced by schema validation and tests. Search must not fetch full histories, and Fetch must not perform fuzzy discovery. All PRs that alter the contract must update architecture, decisions, risks, and backlog entries together.
 
@@ -157,7 +157,7 @@ Context: The lake artifacts use `.parquet` table contracts and should open in st
 
 Decision: Implement deterministic local table helpers in `founder.table_io` and keep storage calls behind path and schema contracts. `.parquet` paths are written as physical Apache Parquet files through pyarrow; `.json` and review CSV artifacts keep their native formats.
 
-Consequences: Search, Fetch, coverage, fundamentals, Gold inputs, and dry runs produce lake tables that open in standard Parquet tooling while module code still depends only on `founder.table_io`.
+Consequences: Search, Fetch, coverage, Gold inputs, and dry runs produce lake tables that open in standard Parquet tooling while module code still depends only on `founder.table_io`.
 
 Update trigger: Revisit if the project changes Parquet engine, compression, partitioning, or schema evolution policy.
 

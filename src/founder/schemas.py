@@ -46,7 +46,6 @@ SCHEMAS: dict[str, tuple[str, ...]] = {
         "currency",
         "fetched_at",
     ),
-    "fundamentals_profile": ("run_id", "isin", "code", "exchange", "name", "currency"),
     "coverage": (
         "run_id",
         "isin",

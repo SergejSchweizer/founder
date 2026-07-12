@@ -1,7 +1,7 @@
 """Search normalization, canonical selection, and universe approval.
 
 The Search module turns broad EODHD discovery payloads into a stable universe
-contract for Fetch. It does not download quote history or fundamentals. Its
+contract for Fetch. It does not download quote history. Its
 output is a versioned `canonical_universe` table with one selected listing per
 non-empty ISIN, plus review artifacts that make missing identifiers visible.
 """

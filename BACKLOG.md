@@ -49,7 +49,7 @@ Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR02.
 
-Scope: Define the simple medallion lake layout: `lake/bronze`, `lake/silver`, and `lake/gold`; add schema docs for search outputs, canonical universe, quotes, fundamentals, coverage, and fetch manifests; update `.gitignore` so local lake data and DuckDB cache files stay out of Git.
+Scope: Define the simple medallion lake layout: `lake/bronze`, `lake/silver`, and `lake/gold`; add schema docs for search outputs, canonical universe, quotes, coverage, and fetch manifests; update `.gitignore` so local lake data and DuckDB cache files stay out of Git.
 
 Acceptance: Tests verify all lake paths and schemas; docs describe which module writes or reads each table.
 
@@ -127,15 +127,15 @@ Acceptance: Tests verify schema, date parsing, numeric types, duplicate preventi
 
 Idempotency: Re-normalizing the same Bronze run is safe and produces no duplicate Silver quote rows.
 
-### PR10. Fetch Module: Fundamentals And Identifier Mapping Capture
+### PR10. Fetch Module: Identifier Mapping Capture
 
 Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR09.
 
-Scope: Fetch ID mapping and fundamentals for canonical listings; archive complete raw payloads under Bronze; extract minimal Silver profile, holdings, allocation, and technical tables needed for filtering/reporting.
+Scope: Fetch ID mapping for canonical listings; archive complete raw payloads under Bronze; extract minimal Silver identifier tables needed for filtering/reporting.
 
-Acceptance: Tests cover missing fundamentals, nested payload preservation, selected field extraction, and schema stability.
+Acceptance: Tests cover missing mappings, nested payload preservation, selected field extraction, and schema stability.
 
 Idempotency: Re-fetching the same run id records one latest payload per listing/run and preserves prior runs.
 

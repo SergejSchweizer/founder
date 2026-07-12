@@ -14,10 +14,8 @@ from founder.config import load_eodhd_config
 from founder.fetch import (
     ADDITIONAL_EODHD_DATASETS,
     build_gap_fetch_plan,
-    eodhd_fundamentals_fetcher,
     eodhd_quote_fetcher,
     eodhd_raw_data_fetcher,
-    fetch_fundamentals_to_silver,
     fetch_quotes_to_bronze,
     fetch_raw_eodhd_datasets_to_bronze,
     normalize_quote_rows,
@@ -156,7 +154,7 @@ def build_parser() -> argparse.ArgumentParser:
     fetch.add_argument(
         "--mock",
         action="store_true",
-        help="Write mocked quote/fundamentals outputs after planning.",
+        help="Write mocked quote outputs after planning.",
     )
     fetch_selector = fetch.add_mutually_exclusive_group()
     fetch_selector.add_argument(
@@ -294,12 +292,6 @@ def main(argv: Sequence[str] | None = None) -> None:
                 currency_by_isin={str(item["isin"]): "" for item in quote_plan},
             )
             write_silver_quotes(paths, quotes)
-            fetch_fundamentals_to_silver(
-                paths,
-                listing_plan,
-                run_date=run_date,
-                fetcher=lambda item: {"General": {"Name": item["code"], "CurrencyCode": ""}},
-            )
             coverage = write_fetch_manifests(
                 paths,
                 run_id=run_id,
@@ -331,12 +323,6 @@ def main(argv: Sequence[str] | None = None) -> None:
                 fetched_at=datetime.combine(run_date, datetime.min.time(), tzinfo=UTC),
             )
             write_silver_quotes(paths, quotes)
-            profiles = fetch_fundamentals_to_silver(
-                paths,
-                listing_plan,
-                run_date=run_date,
-                fetcher=eodhd_fundamentals_fetcher(client),
-            )
             raw_successes, raw_errors = fetch_raw_eodhd_datasets_to_bronze(
                 paths,
                 listing_plan,
@@ -355,7 +341,6 @@ def main(argv: Sequence[str] | None = None) -> None:
             )
             summary["coverage_rows"] = len(coverage)
             summary["error_rows"] = len(quote_errors) + len(raw_errors)
-            summary["fundamental_profiles"] = len(profiles)
             summary["quote_rows"] = len(quotes)
             summary["raw_data_payloads"] = len(raw_successes)
         LOGGER.info("fetch complete run_id=%s plan_rows=%s", run_id, len(quote_plan))

@@ -85,7 +85,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds minimum-risk fund p
 
 `founder.search` owns discovery normalization and universe approval. It writes raw candidate payloads, normalizes Search rows, selects one canonical listing per non-empty ISIN, exports review artifacts, and writes the active universe pointer for Fetch.
 
-`founder.fetch` owns data loading for the approved universe. It validates canonical rows, builds EODHD symbols, writes fetch plans, archives quote, fundamentals, dividends, and splits payloads, normalizes quote rows, logs non-secret errors, and writes coverage manifests.
+`founder.fetch` owns data loading for the approved universe. It validates canonical rows, builds EODHD symbols, writes fetch plans, archives quote, dividends, and splits payloads, normalizes quote rows, logs non-secret errors, and writes coverage manifests.
 
 `founder.universe_review` owns pre-optimization universe checks. It summarizes missing ISINs, currency exposure, and survivorship-bias warnings so weak inputs are visible before portfolio weights are trusted.
 
@@ -120,16 +120,16 @@ This project analyzes EODHD end-of-day ETF quotes and builds minimum-risk fund p
 ## Module Boundary
 
 - **Search module**: owns filtered EODHD discovery, candidate normalization, one-row-per-ISIN canonical selection, XETRA preference, review artifacts, and the active universe pointer.
-- **Fetch module**: owns canonical-universe validation, fetch planning, EOD quotes, identifier mapping, fundamentals, lake writes, coverage, and fetch error logging.
+- **Fetch module**: owns canonical-universe validation, fetch planning, EOD quotes, additional EODHD listing datasets, lake writes, coverage, and fetch error logging.
 - **Universe review module**: owns missing-ISIN, currency-exposure, and survivorship-bias review summaries before optimization consumes a universe.
 - **Portfolio module**: owns explicit optimization constraints and deterministic baseline weight validation.
 - **Trading module**: owns Flatex CSV order preparation from approved target weights and latest prices.
-- **Contract**: Fetch consumes only the Search module's approved `canonical_universe.parquet`; Fetch must not perform fuzzy discovery, and Search must not fetch full quote or fundamental history.
+- **Contract**: Fetch consumes only the Search module's approved `canonical_universe.parquet`; Fetch must not perform fuzzy discovery, and Search must not fetch full quote history.
 
 ## Simple Lake Layout
 
-- **Bronze**: raw or near-raw EODHD search, quote, fundamentals, dividends, splits, and mapping payloads.
-- **Silver**: normalized candidates, canonical universe, quotes partitioned by year, selected fundamentals, coverage-ready tables.
+- **Bronze**: raw or near-raw EODHD search, quote, dividends, splits, and mapping payloads.
+- **Silver**: normalized candidates, canonical universe, quotes partitioned by year, and coverage-ready tables.
 - **Gold**: portfolio-ready returns, correlation, covariance, risk inputs, and later portfolio weights.
 - **Silver metadata**: active universe pointer, fetch plans, fetch runs, coverage, errors, and dataset version metadata stored under the Silver layer.
 
