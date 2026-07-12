@@ -2,7 +2,28 @@
 
 Last reviewed: 2026-07-12
 
+## Table Of Contents
+
+- [How To Read Decisions](#how-to-read-decisions)
+- [D001. Keep Local Secrets Out of Git](#d001-keep-local-secrets-out-of-git)
+- [D002. Track Architecture, Risks, Backlog, and Decisions as First-Class Docs](#d002-track-architecture-risks-backlog-and-decisions-as-first-class-docs)
+- [D003. Use EODHD as the First ETF Quote Source](#d003-use-eodhd-as-the-first-etf-quote-source)
+- [D004. Start With Minimum-Risk Portfolio Optimization](#d004-start-with-minimum-risk-portfolio-optimization)
+- [D005. Deduplicate ETF Universe By ISIN And Prefer XETRA](#d005-deduplicate-etf-universe-by-isin-and-prefer-xetra)
+- [D006. Use EODHD For Data And Flatex For Trading](#d006-use-eodhd-for-data-and-flatex-for-trading)
+- [D007. Split Discovery And Data Loading Into Search And Fetch Modules](#d007-split-discovery-and-data-loading-into-search-and-fetch-modules)
+- [D008. Use Local And GitHub Quality Gates](#d008-use-local-and-github-quality-gates)
+- [D009. Keep Quality Gates Local And Out Of `.github`](#d009-keep-quality-gates-local-and-out-of-github)
+- [D010. Use Two Quality Gate Layers](#d010-use-two-quality-gate-layers)
+- [D011. Keep Local Lake Serialization Dependency-Free For The Baseline](#d011-keep-local-lake-serialization-dependency-free-for-the-baseline)
+- [D012. Keep Optimization Constraints And Trade Exports Separate](#d012-keep-optimization-constraints-and-trade-exports-separate)
+- [Update Rules](#update-rules)
+
 Record durable technical decisions here. Use short entries with context, decision, consequences, and update triggers.
+
+## How To Read Decisions
+
+Read decisions when you need to understand why the project chose a direction. Decisions should not restate operational runbooks or full module guides; they preserve context, consequences, and the trigger that would justify revisiting the choice.
 
 ## D001. Keep Local Secrets Out of Git
 

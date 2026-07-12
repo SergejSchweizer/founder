@@ -2,9 +2,36 @@
 
 Last reviewed: 2026-07-12
 
+## Table Of Contents
+
+- [Onboarding Path](#onboarding-path)
+- [Current Facts](#current-facts)
+- [ETF Discovery Statistics](#etf-discovery-statistics)
+- [Intended Workflow](#intended-workflow)
+- [Portfolio Objective](#portfolio-objective)
+- [Documentation Map](#documentation-map)
+- [Run Search And Fetch](#run-search-and-fetch)
+- [Local Dry Run](#local-dry-run)
+- [EODHD Request Safety](#eodhd-request-safety)
+- [Logging And Debugging](#logging-and-debugging)
+- [Quality Gates](#quality-gates)
+- [Documentation Refresh](#documentation-refresh)
+- [Keep This README Up To Date](#keep-this-readme-up-to-date)
+
 Founder is a fund portfolio builder for exchange-traded funds. The project goal is to analyze EODHD end-of-day quotes for multiple thousands of ETFs and build minimum-risk fund portfolio weights.
 
 The primary data source is the EODHD subscription for EOD Historical Data. Flatex will be used as the trading exchange/broker venue for turning portfolio weights into executable ETF trades. Local API credentials must stay in ignored environment files such as `.env.local`; never commit real tokens.
+
+## Onboarding Path
+
+New contributors should read the documentation in this order:
+
+1. Start here to understand the goal, data source, current facts, and local commands.
+2. Read [ARCHITECTURE.md](ARCHITECTURE.md) for the module diagram and one-paragraph purpose of each package module.
+3. Read [docs/search_fetch_workflow.md](docs/search_fetch_workflow.md) before changing Search or Fetch behavior.
+4. Read [docs/lake_contracts.md](docs/lake_contracts.md) before changing paths, schemas, or storage formats.
+5. Check [RISKS.md](RISKS.md), [DECISIONS.md](DECISIONS.md), and [BACKLOG.md](BACKLOG.md) before opening a PR-sized change.
+6. Follow [AGENTS.md](AGENTS.md) for workflow rules, PR status tracking, and merge-gate policy.
 
 ## Current Facts
 
@@ -14,10 +41,6 @@ The primary data source is the EODHD subscription for EOD Historical Data. Flate
 - EODHD Search API supports lookup by ticker, company/fund name, or ISIN through `/api/search/{query_string}`.
 - EODHD Search API can filter by asset type with `type=etf` or `type=fund`, but each search response is capped at 500 results.
 - A complete broad lookup for names containing `UCITS ETF` requires enumerating EODHD exchange symbol lists and filtering locally.
-- The latest local EODHD enumeration checked 70 exchange codes.
-- The enumeration found 8,165 unique active instruments with `UCITS ETF` in the instrument name.
-- The result set contains 8,063 rows with type `ETF` and 102 rows with type `FUND`.
-- The largest match counts were on `XETRA`, `LSE`, `F`, `SW`, `PA`, `AS`, and `EUFUND`.
 - The generated discovery dataset is stored at `docs/eodhd_ucits_etf_matches.csv`.
 - Portfolio fetches should use one canonical listing per ISIN: prefer `XETRA` when that ISIN is listed there, otherwise select a fallback exchange deterministically.
 - The canonical no-duplicate-ISIN dataset is stored at `docs/eodhd_ucits_etf_canonical_isins.csv`.
@@ -115,14 +138,31 @@ Subject to constraints that will be made explicit before implementation, such as
 - minimum quote-history coverage;
 - duplicate listing and duplicate ISIN handling.
 
-## Repository Docs
+## Documentation Map
 
-- `ARCHITECTURE.md` describes project layers and boundaries.
-- `RISKS.md` tracks active technical, data, and operational risks.
-- `BACKLOG.md` tracks visible implementation work.
-- `DECISIONS.md` records durable technical decisions.
-- `AGENTS.md` stores generated project-history risk context.
-- `docs/lake_contracts.md` describes the local Bronze, Silver, Gold, and Meta table contracts.
+- [ARCHITECTURE.md](ARCHITECTURE.md) explains how modules connect and where responsibilities live.
+- [docs/search_fetch_workflow.md](docs/search_fetch_workflow.md) shows how to use Search and Fetch from Python.
+- [docs/lake_contracts.md](docs/lake_contracts.md) defines lake layers and table contracts.
+- [DECISIONS.md](DECISIONS.md) records why durable technical choices were made.
+- [RISKS.md](RISKS.md) tracks active project risks and mitigations.
+- [BACKLOG.md](BACKLOG.md) tracks PR-sized work and implementation status.
+- [AGENTS.md](AGENTS.md) defines agent workflow rules and generated project-history risks.
+
+## Run Search And Fetch
+
+Search and Fetch have separate CLI calls. First run Search with the string to find. By default this reads `docs/eodhd_ucits_etf_matches.csv`, writes to `data/search-fetch`, generates a search run id, and approves the canonical universe for Fetch:
+
+```bash
+uv run founder search "UCITS ETF"
+```
+
+Then run Fetch from the approved universe pointer. By default this uses the same root and generated run/date values. Use `--mock` for a local no-token run that writes quote, fundamentals, and coverage artifacts:
+
+```bash
+uv run founder fetch --mock
+```
+
+For full input format details and Python usage examples, see [docs/search_fetch_workflow.md](docs/search_fetch_workflow.md#how-to-run-both-modules).
 
 ## Local Dry Run
 
@@ -147,9 +187,27 @@ EODHD_RETRY_BACKOFF_SECONDS=0.5
 
 HTTP `429` responses are retried when retries remain. If EODHD sends `Retry-After`, Founder waits for that duration before retrying; otherwise it uses incremental backoff.
 
+## Logging And Debugging
+
+Founder writes uniformly formatted logs under `.logs/`. Plain log files are kept for seven days, then zipped; zipped logs older than one month are deleted. `.logs/` is ignored by Git.
+
+All CLI commands support `--debug` for more detailed module logs:
+
+```bash
+uv run founder search "UCITS ETF" --debug
+uv run founder fetch --mock --debug
+uv run founder dry-run --debug
+```
+
+The log format is consistent across Founder modules:
+
+```text
+YYYY-MM-DDTHH:MM:SSZ LEVEL logger.name message
+```
+
 ## Quality Gates
 
-Founder uses exactly two quality gate layers.
+Founder uses two quality gates. [AGENTS.md](AGENTS.md) is the source of truth for branch protection and merge policy; this section only lists the commands a contributor should run locally.
 
 ### PR Gate
 
@@ -157,16 +215,6 @@ Run this before every commit, push, or pull request update:
 
 ```bash
 uv run founder-quality pr
-```
-
-The PR gate runs:
-
-```text
-ruff check
-ruff format --check
-mypy
-pytest
-Conventional Commit validation for branch commits
 ```
 
 The local pre-commit hook runs this same PR gate.
@@ -179,8 +227,7 @@ Run this immediately before merging to `main`:
 uv run founder-quality main
 ```
 
-The main gate runs the PR gate and then requires a clean tracked working tree.
-For main merges, pytest must report at least 95% coverage:
+The main gate runs the PR gate, requires a clean tracked working tree, and enforces at least 95% test coverage:
 
 ```text
 pytest --cov=founder --cov-report=term-missing --cov-fail-under=95
@@ -194,9 +241,7 @@ type(optional-scope): subject
 
 Allowed types are `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, and `test`.
 
-The local pre-commit setup also installs a `commit-msg` hook that validates the commit subject before a commit is accepted.
-
-GitHub protects `main` with the required `main-quality` status check, conversation resolution, linear history, and disabled force pushes/deletions. Same-repository PRs may be squash-merged automatically after the `main-quality` workflow passes. The separate `pr-quality` workflow runs the faster PR feedback scope on pull requests and branch pushes.
+The local pre-commit setup also installs a `commit-msg` hook that validates the commit subject before a commit is accepted. GitHub merge policy is documented in [AGENTS.md](AGENTS.md).
 
 Install dependencies with:
 

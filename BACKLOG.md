@@ -2,9 +2,20 @@
 
 Last reviewed: 2026-07-12
 
+## Table Of Contents
+
+- [How To Use This Backlog](#how-to-use-this-backlog)
+- [Search And Fetch Module PR Stack](#search-and-fetch-module-pr-stack)
+- [Future Work After Finalization](#future-work-after-finalization)
+- [Update Rules](#update-rules)
+
 This backlog captures known work that should stay visible across sessions. Keep entries short, actionable, and tied to risks or decisions where possible.
 
 Every PR-sized backlog item must include `Git status` and `PR`. Use `Git status: not started` and `PR: TBD` until work begins.
+
+## How To Use This Backlog
+
+Read this after the architecture and workflow docs when you need implementation status. This file should not explain module behavior in depth; it records scope, dependencies, acceptance criteria, idempotency expectations, Git status, and PR links for trackable work.
 
 ## Search And Fetch Module PR Stack
 

@@ -1,4 +1,10 @@
-"""Search normalization, canonical selection, and universe approval."""
+"""Search normalization, canonical selection, and universe approval.
+
+The Search module turns broad EODHD discovery payloads into a stable universe
+contract for Fetch. It does not download quote history or fundamentals. Its
+output is a versioned `canonical_universe` table with one selected listing per
+non-empty ISIN, plus review artifacts that make missing identifiers visible.
+"""
 
 from __future__ import annotations
 
@@ -7,12 +13,20 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
+from founder.logging import get_logger
 from founder.paths import LakePaths
 from founder.schemas import required_fields
 from founder.table_io import JsonRow, read_json, read_rows, write_csv, write_json, write_rows
 
+LOGGER = get_logger(__name__)
+
 
 def normalize_name(value: str) -> str:
+    """Return a case-folded, whitespace-normalized instrument name.
+
+    Use this for deterministic comparisons only. Keep the original `name` field
+    for display, review exports, and broker-facing output.
+    """
     return " ".join(value.casefold().split())
 
 
@@ -24,6 +38,12 @@ def normalize_candidate(
     source_endpoint: str,
     found_at: datetime,
 ) -> JsonRow:
+    """Convert one raw EODHD candidate payload into the Search row contract.
+
+    The function accepts either EODHD-style keys such as `Code` and `Isin` or
+    already-normalized lowercase keys. Missing optional values become empty
+    strings so downstream review can count them explicitly.
+    """
     code = str(raw.get("Code", raw.get("code", ""))).strip()
     exchange = str(raw.get("Exchange", raw.get("exchange", ""))).strip()
     name = str(raw.get("Name", raw.get("name", ""))).strip()
@@ -52,8 +72,21 @@ def write_search_run(
     run_date: date | None = None,
     found_at: datetime | None = None,
 ) -> list[JsonRow]:
+    """Write raw discovery payloads and normalized Search candidates.
+
+    `raw_candidates` should be the collected EODHD search or exchange-symbol-list
+    rows for one discovery run. The function writes the raw batch to Bronze,
+    writes normalized candidate rows to Silver, and returns the normalized rows.
+    Reusing the same `search_run_id` replaces the same deterministic paths.
+    """
     checked_date = run_date or date.today()
     checked_at = found_at or datetime.now(UTC)
+    LOGGER.debug(
+        "writing search run search_run_id=%s query=%s raw_candidates=%s",
+        search_run_id,
+        query,
+        len(raw_candidates),
+    )
     bronze_path = paths.bronze_search_run(checked_date.isoformat()) / f"{search_run_id}.json"
     write_json(
         bronze_path,
@@ -70,10 +103,18 @@ def write_search_run(
         for candidate in raw_candidates
     ]
     write_rows(paths.candidates(search_run_id), rows)
+    LOGGER.info("search candidates written search_run_id=%s rows=%s", search_run_id, len(rows))
     return rows
 
 
 def select_canonical(candidates: Iterable[Mapping[str, Any]]) -> list[JsonRow]:
+    """Select one fetchable listing per ISIN.
+
+    Rows without an ISIN are excluded because Fetch requires stable identifiers.
+    For duplicate listings, XETRA wins when present; otherwise sorting by
+    exchange and code gives a deterministic fallback. Returned rows are sorted by
+    ISIN and marked `selected_for_fetch=true`.
+    """
     grouped: dict[str, list[Mapping[str, Any]]] = {}
     missing_isin = 0
     for candidate in candidates:
@@ -116,10 +157,19 @@ def select_canonical(candidates: Iterable[Mapping[str, Any]]) -> list[JsonRow]:
         )
     if missing_isin:
         selected.sort(key=lambda row: str(row["isin"]))
+    LOGGER.debug(
+        "canonical selection complete rows=%s missing_isin=%s", len(selected), missing_isin
+    )
     return selected
 
 
 def write_canonical_universe(paths: LakePaths, search_run_id: str) -> list[JsonRow]:
+    """Build and persist the canonical universe for a Search run.
+
+    This reads normalized candidates, writes the canonical table, writes a small
+    summary with missing-ISIN counts, and exports a CSV for human review before
+    Fetch consumes the universe.
+    """
     candidates = read_rows(paths.candidates(search_run_id))
     canonical = select_canonical(candidates)
     write_rows(paths.canonical_universe(search_run_id), canonical)
@@ -135,19 +185,30 @@ def write_canonical_universe(paths: LakePaths, search_run_id: str) -> list[JsonR
         },
     )
     write_csv(paths.review_csv(search_run_id), canonical, required_fields("canonical_universe"))
+    LOGGER.info(
+        "canonical universe written search_run_id=%s rows=%s", search_run_id, len(canonical)
+    )
     return canonical
 
 
 def approve_universe(paths: LakePaths, search_run_id: str) -> JsonRow:
+    """Mark a canonical universe as the active Fetch input.
+
+    Approval writes `current_universe.json` in Meta with the selected Search run
+    id and canonical-universe path. Fetch can resolve this pointer without
+    knowing how Search produced the universe.
+    """
     pointer = {
         "search_run_id": search_run_id,
         "canonical_universe_path": str(paths.canonical_universe(search_run_id)),
         "approved_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
     }
     write_json(paths.current_universe(), pointer)
+    LOGGER.info("universe approved search_run_id=%s", search_run_id)
     return pointer
 
 
 def resolve_current_universe(paths: LakePaths) -> Path:
+    """Return the approved canonical-universe path from Meta."""
     payload = read_json(paths.current_universe())
     return Path(str(payload["canonical_universe_path"]))

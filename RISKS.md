@@ -2,7 +2,24 @@
 
 Last reviewed: 2026-07-12
 
+## Table Of Contents
+
+- [How To Read Risks](#how-to-read-risks)
+- [R001. Exchange API Reliability Can Silently Reduce Historical Completeness](#r001-exchange-api-reliability-can-silently-reduce-historical-completeness)
+- [R002. Dataset Naming Drift Can Break Bronze, Silver, and Gold Joins](#r002-dataset-naming-drift-can-break-bronze-silver-and-gold-joins)
+- [R003. Large Refactors Can Blur Architecture Boundaries](#r003-large-refactors-can-blur-architecture-boundaries)
+- [R004. Coverage and Strict Typing Can Drift After Broad Edits](#r004-coverage-and-strict-typing-can-drift-after-broad-edits)
+- [R005. Documentation Snapshots Can Become Stale Relative to the Lake](#r005-documentation-snapshots-can-become-stale-relative-to-the-lake)
+- [R006. ETF Universe Discovery Can Be Incomplete or Duplicated](#r006-etf-universe-discovery-can-be-incomplete-or-duplicated)
+- [R007. Minimum-Risk Weights Can Be Misleading Without Clean Quote Inputs](#r007-minimum-risk-weights-can-be-misleading-without-clean-quote-inputs)
+- [R008. Search And Fetch Contract Drift Can Corrupt The Lake](#r008-search-and-fetch-contract-drift-can-corrupt-the-lake)
+- [Update Rules](#update-rules)
+
 This file tracks active operational, data correctness, and architecture risks. Keep it aligned with `AGENTS.md` and project history when commits introduce or retire meaningful risks.
+
+## How To Read Risks
+
+Read risks before changing ingestion, storage contracts, quality gates, or portfolio outputs. This file should identify what can go wrong and how to mitigate it; detailed module usage belongs in architecture and workflow docs.
 
 ## R001. Exchange API Reliability Can Silently Reduce Historical Completeness
 
