@@ -253,7 +253,7 @@ Idempotency: Re-running the same optimization id with unchanged evaluation input
 
 ### PR19. Portfolio Module: Risk Parity And Equal Risk Contribution
 
-Git status: not started. PR: TBD.
+Git status: in progress. PR: local branch `feat/pr19-risk-parity`.
 
 Priority: P1 robust optimizer.
 

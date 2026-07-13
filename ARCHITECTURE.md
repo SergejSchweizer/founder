@@ -108,7 +108,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 
 `founder.evaluation` owns portfolio analysis datasets that compare candidate portfolios and optimization techniques. It consumes Gold return inputs and writes aligned return matrices, asset metrics, portfolio return series, drawdowns, and portfolio metrics today; later evaluation work extends this boundary with efficient-frontier points, walk-forward backtests, rebalancing simulations, and tail-risk diagnostics without calling EODHD.
 
-`founder.portfolio` owns optimization constraints and target weights. It validates long-only bounds, minimum and maximum weights, quote-coverage assumptions, and objective settings for constrained minimum variance, risk parity, hierarchical risk parity, maximum diversification, CVaR, and related optimizers.
+`founder.portfolio` owns optimization constraints, target weights, and risk-contribution diagnostics. It validates long-only bounds, minimum and maximum weights, quote-coverage assumptions, and objective settings for constrained minimum variance, risk parity, hierarchical risk parity, maximum diversification, CVaR, and related optimizers.
 
 `founder.trading` owns Flatex trade-preparation exports. It converts approved target weights, latest prices, and canonical listing metadata into broker-ready CSV order rows without calling broker APIs or deciding the optimization objective.
 
@@ -159,7 +159,7 @@ Portfolio evaluation should be reproducible from existing Gold risk inputs and s
 
 The evaluation layer computes aligned return matrices, asset-level metrics, portfolio return series, cumulative wealth, drawdown series, maximum drawdown, drawdown duration, recovery duration, Calmar ratio, and ulcer index from Gold return files. It should later add efficient-frontier points, frontier weights, walk-forward backtests, rebalancing simulations, VaR, CVaR, and tail scenario diagnostics.
 
-The portfolio layer compares equal-weight, constrained minimum variance, maximum Sharpe as a comparison objective, and target-return minimum variance today. It should later add risk parity, hierarchical risk parity, maximum diversification, and CVaR-aware target weights. Constrained minimum variance and risk parity are the first candidates for trusted production weights; maximum Sharpe remains a comparison result until expected-return assumptions are validated out of sample.
+The portfolio layer compares equal-weight, constrained minimum variance, maximum Sharpe as a comparison objective, target-return minimum variance, and risk parity today. It should later add hierarchical risk parity, maximum diversification, and CVaR-aware target weights. Constrained minimum variance and risk parity are the first candidates for trusted production weights; maximum Sharpe remains a comparison result until expected-return assumptions are validated out of sample.
 
 ## Boundaries
 

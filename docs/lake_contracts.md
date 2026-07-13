@@ -44,6 +44,7 @@ gold/evaluation/portfolio_metrics/{evaluation_id}.parquet
 gold/evaluation/frontier_points/{evaluation_id}.parquet
 gold/evaluation/frontier_weights/{evaluation_id}.parquet
 gold/weights/{objective}/{evaluation_id}.parquet
+gold/risk_contributions/{objective}/{evaluation_id}.parquet
 ```
 
 Runtime logs are intentionally outside the lake under `.logs/`. They are operational diagnostics, not dataset artifacts.
@@ -97,10 +98,11 @@ Gold evaluation datasets include:
 - `evaluation/rebalance_events/{run_id}.parquet`: planned rebalance dates, pre-trade weights, target weights, turnover, transaction-cost estimates, and post-cost returns.
 - `evaluation/tail_risk/{run_id}.parquet`: planned VaR, CVaR, confidence level, tail observation count, and tail scenario diagnostics.
 - `weights/{objective}/{evaluation_id}.parquet`: selected target weights, constraints, and diagnostics for objectives such as equal weight, constrained minimum variance, risk parity, hierarchical risk parity, maximum diversification, and CVaR.
+- `risk_contributions/{objective}/{evaluation_id}.parquet`: marginal, absolute, and percent risk contribution rows for risk-parity portfolios, including target risk budgets, per-asset residuals, portfolio variance, objective residual, and convergence status.
 
 Evaluation outputs should include explicit run ids, objective names, annualization settings, risk-free-rate assumptions, constraints, and input dataset identifiers so results can be compared and rebuilt deterministically.
 
-Current portfolio evaluation writes equal-weight or explicit long-only cash-free weight results. Recomputing the same portfolio id replaces that portfolio's return and metric rows while preserving other portfolios in the same evaluation id. Current portfolio optimization writes deterministic equal-weight, constrained minimum-variance, maximum-Sharpe comparison, and target-return minimum-variance target weights to `weights/{objective}/{evaluation_id}.parquet`.
+Current portfolio evaluation writes equal-weight or explicit long-only cash-free weight results. Recomputing the same portfolio id replaces that portfolio's return and metric rows while preserving other portfolios in the same evaluation id. Current portfolio optimization writes deterministic equal-weight, constrained minimum-variance, maximum-Sharpe comparison, target-return minimum-variance, and risk-parity target weights to `weights/{objective}/{evaluation_id}.parquet`; risk-parity runs also write contribution diagnostics to `risk_contributions/{objective}/{evaluation_id}.parquet`.
 
 ## How This Fits The Onboarding Flow
 

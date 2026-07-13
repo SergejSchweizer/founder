@@ -68,6 +68,9 @@ def test_lake_paths_are_deterministic() -> None:
     assert paths.gold_optimized_weights("minimum_variance", "eval-1") == Path(
         "lake/gold/weights/minimum_variance/eval-1.parquet"
     )
+    assert paths.gold_risk_contributions("risk_parity", "eval-1") == Path(
+        "lake/gold/risk_contributions/risk_parity/eval-1.parquet"
+    )
     assert paths.bronze_plan("bronze-1") == Path("lake/silver/plans/bronze_plans/bronze-1.parquet")
     assert paths.coverage() == Path("lake/silver/coverage/coverage.parquet")
     assert paths.quote_gaps() == Path("lake/silver/coverage/quote_gaps.parquet")
