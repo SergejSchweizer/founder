@@ -211,7 +211,7 @@ Idempotency: Path and schema helpers are pure and deterministic; adding contract
 
 ### PR16. Evaluation Module: Return Matrix And Asset Metrics
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/21.
 
 Priority: P0 foundation.
 
