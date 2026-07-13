@@ -18,6 +18,7 @@ Last reviewed: 2026-07-13
 - [D011. Write Physical Parquet Lake Tables](#d011-write-physical-parquet-lake-tables)
 - [D012. Keep Optimization Constraints And Trade Exports Separate](#d012-keep-optimization-constraints-and-trade-exports-separate)
 - [D013. Store Large Correlation Search As Edge Tables](#d013-store-large-correlation-search-as-edge-tables)
+- [D014. Use Per-Layer Process Locks](#d014-use-per-layer-process-locks)
 - [Update Rules](#update-rules)
 
 Record durable technical decisions here. Use short entries with context, decision, consequences, and update triggers.
@@ -185,6 +186,18 @@ Decision: Keep the existing per-ISIN Gold correlation and covariance baseline fo
 Consequences: Large-universe work should query `correlation_edges` instead of treating dense matrices as the primary persisted artifact. Future DuckDB, Polars, or sparse-array work should preserve the edge schema or document an explicit migration.
 
 Update trigger: Revisit if the project adopts a different primary matrix store, changes bucket strategy, or requires exact random-access dense matrix slices as the main workload.
+
+## D014. Use Per-Layer Process Locks
+
+Date: 2026-07-13
+
+Context: Bronze, Silver, and Gold can be run either as standalone CLI commands or through `founder refresh`. A global cron `flock` prevents one scheduled refresh overlap, but it does not protect manual standalone layer commands from colliding with a refresh or with another same-layer command.
+
+Decision: Use stable OS-backed locks per lake layer: `lake/bronze/runs/bronze.lock`, `lake/silver/runs/silver.lock`, and `lake/gold/runs/gold.lock`. Each layer command exits with a clear active-run error when the same layer is already running for the lake root.
+
+Consequences: Different layers may still run at the same time when explicitly started, but duplicate Bronze, duplicate Silver, and duplicate Gold writes are blocked. The lock files may remain as metadata after a process exits, but the OS lock is released when the process terminates, avoiding stale file-existence locks.
+
+Update trigger: Revisit if Founder moves to a distributed scheduler, multiple hosts write the same lake root, or the project needs whole-refresh serialization instead of same-layer serialization.
 
 ## Update Rules
 

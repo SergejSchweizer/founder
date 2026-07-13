@@ -9,9 +9,9 @@ analytical Silver and Gold outputs.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextlib import contextmanager
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -21,6 +21,7 @@ from typing import Any
 from founder.http import EodhdClient
 from founder.logging import get_logger
 from founder.paths import LakePaths
+from founder.run_locks import layer_run_lock
 from founder.schemas import required_fields
 from founder.table_io import JsonRow, read_rows, write_csv, write_rows
 
@@ -726,17 +727,19 @@ def write_bronze_manifests(
     return coverage
 
 
-@contextmanager
-def bronze_run_lock(paths: LakePaths, run_id: str) -> Iterator[Path]:
-    """Create a simple lock file so cron runs do not overlap for one run id."""
-    lock_path = paths.silver / "runs" / f"{run_id}.lock"
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        with lock_path.open("x", encoding="utf-8") as lock_file:
-            lock_file.write(datetime.now(UTC).replace(microsecond=0).isoformat() + "\n")
-    except FileExistsError as error:
-        raise RuntimeError(f"bronze run already active: {run_id}") from error
-    try:
-        yield lock_path
-    finally:
-        lock_path.unlink(missing_ok=True)
+def bronze_run_lock(paths: LakePaths, run_id: str) -> AbstractContextManager[Path]:
+    """Return the stable Bronze layer lock.
+
+    `run_id` is accepted for backward compatibility with callers that used the
+    previous run-scoped lock contract. Bronze locking is intentionally layer-wide
+    so different run ids cannot fetch Bronze concurrently.
+
+    Args:
+        paths: Lake path contract for the target data root.
+        run_id: Historical run-scoped lock identifier; ignored by layer locks.
+
+    Returns:
+        Context manager holding the Bronze layer lock.
+    """
+    del run_id
+    return layer_run_lock(paths, "bronze")

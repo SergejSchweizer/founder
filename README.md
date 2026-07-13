@@ -234,18 +234,17 @@ For full input format details and Python usage examples, see [docs/search_bronze
 
 ## Scheduled Founder Cron
 
-The `vcs` user crontab runs the Founder lake refresh every day at 18:00 local server time. Keep the job readable by defining absolute paths once and using `flock` so a slow previous run prevents overlap:
+The `vcs` user crontab runs the Founder lake refresh every day at 18:00 local server time. Founder commands hold per-layer process locks at `lake/bronze/runs/bronze.lock`, `lake/silver/runs/silver.lock`, and `lake/gold/runs/gold.lock`, so a second Bronze, Silver, or Gold command exits instead of overlapping the active layer. Keep the cron job readable by defining absolute paths once:
 
 ```cron
 SHELL=/bin/bash
 FOUNDER_PROJECT=/home/vcs/git/founder
 FOUNDER_UV=/home/vcs/.local/bin/uv
-FOUNDER_LOCK=/home/vcs/git/founder/lake/silver/runs/founder-refresh.lock
 FOUNDER_LOG=/home/vcs/git/founder/.logs/cron-refresh.log
 
 # Daily lake refresh at 18:00 local server time.
-# Runs Bronze -> Silver -> Gold and skips the run if a previous refresh is still active.
-0 18 * * * cd "$FOUNDER_PROJECT" && /usr/bin/flock -n "$FOUNDER_LOCK" "$FOUNDER_UV" run founder refresh --root "$FOUNDER_PROJECT/lake" --concurrency 2 --debug >> "$FOUNDER_LOG" 2>&1
+# Runs Bronze -> Silver -> Gold; each layer refuses to overlap an active same-layer run.
+0 18 * * * cd "$FOUNDER_PROJECT" && "$FOUNDER_UV" run founder refresh --root "$FOUNDER_PROJECT/lake" --concurrency 2 --debug >> "$FOUNDER_LOG" 2>&1
 ```
 
 Inspect it with `crontab -l`. Cron output is appended to `.logs/cron-refresh.log`.
