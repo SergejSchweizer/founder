@@ -267,7 +267,7 @@ Idempotency: Re-running the same risk-parity optimization id with unchanged cova
 
 ### PR27. Gold Correlation Edge Dataset Baseline
 
-Git status: merged. PR: local branch `pr-gold-correlation-edges`.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/28.
 
 Priority: P0 scalability foundation.
 
