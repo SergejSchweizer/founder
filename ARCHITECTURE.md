@@ -86,6 +86,8 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 
 `founder.logging` owns uniform module logging. It configures `.logs/founder-YYYY-MM-DD.log`, supports DEBUG verbosity for CLI commands, zips plain logs older than seven days, and deletes zip archives older than one month.
 
+`founder.run_locks` owns per-layer process locks. It serializes Bronze, Silver, and Gold commands per lake root with stable OS locks so standalone commands and refresh runs cannot overlap the same layer.
+
 `founder.__init__` owns the package import surface. It keeps the package importable and exposes the package version without triggering configuration loading, API calls, or lake writes.
 
 `founder.contracts` owns typed cross-module data contracts. It defines validated dataclasses for Search candidates, canonical universe rows, bronze runs, and bronze errors when code needs stronger structure than plain row dictionaries.
@@ -98,7 +100,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 
 `founder.search` owns discovery normalization and universe approval. It writes raw candidate payloads, normalizes Search rows, selects one canonical listing per non-empty ISIN, exports review artifacts, and writes the active universe pointer for Bronze.
 
-`founder.bronze` owns data loading for the approved universe. It validates canonical rows, builds EODHD symbols, writes bronze plans, archives quote, dividends, and splits payloads, logs non-secret errors, and writes operational coverage manifests. It is designed for unattended cron execution with bounded EODHD parallelism, default concurrency `2`, shared request pacing, `Retry-After` handling, resumable runs, and no overlapping writes for the same lake root and run id.
+`founder.bronze` owns data loading for the approved universe. It validates canonical rows, builds EODHD symbols, writes bronze plans, archives quote, dividends, and splits payloads, logs non-secret errors, and writes operational coverage manifests. It is designed for unattended cron execution with bounded EODHD parallelism, default concurrency `2`, shared request pacing, `Retry-After` handling, resumable runs, and no overlapping Bronze writes for the same lake root.
 
 `founder.silver` owns Bronze-to-Silver market data builds. It reads archived quote rows, validates schema and merge keys, and writes one Silver quote file per exchange and ISIN without calling EODHD. Silver writes listing files with bounded parallelism and defaults to two worker threads.
 
@@ -132,6 +134,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 - **Validation**: Focused tests first, followed by full quality gates for behavior, typing, formatting, architecture boundaries, and at least 95% test coverage before main merges.
 - **Configuration**: Secrets and local credentials live in ignored local environment files such as `.env.local`.
 - **Logging**: Shared Founder logging writes uniformly formatted `.logs/` files with debug verbosity and retention.
+- **Run locks**: Stable layer locks under `lake/{bronze,silver,gold}/runs/*.lock` prevent duplicate same-layer commands on one host.
 - **Dry run**: `founder dry-run` executes the mocked pipeline from Search through Gold inputs without credentials.
 - **Docs refresh**: `founder-docs-refresh` writes a generated documentation review report for tracked repository docs.
 
@@ -163,7 +166,7 @@ The portfolio layer compares equal-weight, constrained minimum variance, maximum
 
 ## Boundaries
 
-- Discovery, bronze planning, checkpointing, bounded parallelism, cron safety, retries, and completeness reporting belong near ingestion code.
+- Discovery, bronze planning, checkpointing, bounded parallelism, layer locking, retries, and completeness reporting belong near ingestion code.
 - Search and Bronze communicate through explicit versioned contracts, not shared mutable state.
 - Dataset names, lake paths, contracts, manifests, CLI choices, and tests must move together.
 - Transformation code should depend on explicit inputs and contracts, not hidden global state.

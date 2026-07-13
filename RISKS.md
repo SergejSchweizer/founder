@@ -28,7 +28,7 @@ Status: Active
 
 Signal: External API route errors, retry behavior, rate limits, and long-running trade backfills appear repeatedly in project history.
 
-Mitigation: Keep debug logs, checkpoint keys, deterministic windows, bounded bronze concurrency, request pacing, `Retry-After` aware retries, cron no-overlap behavior, and completeness reports aligned before changing bronze execution.
+Mitigation: Keep debug logs, checkpoint keys, deterministic windows, bounded bronze concurrency, per-layer run locks, request pacing, `Retry-After` aware retries, and completeness reports aligned before changing Bronze, Silver, or Gold execution.
 
 ## R002. Dataset Naming Drift Can Break Bronze, Silver, and Gold Joins
 

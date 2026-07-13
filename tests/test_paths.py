@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from founder.paths import LakePaths
+from founder.run_locks import layer_lock_path
 
 
 def test_lake_paths_are_deterministic() -> None:
@@ -10,6 +11,9 @@ def test_lake_paths_are_deterministic() -> None:
     assert paths.silver == Path("lake/silver")
     assert paths.gold == Path("lake/gold")
     assert paths.metadata == Path("lake/silver")
+    assert layer_lock_path(paths, "bronze") == Path("lake/bronze/runs/bronze.lock")
+    assert layer_lock_path(paths, "silver") == Path("lake/silver/runs/silver.lock")
+    assert layer_lock_path(paths, "gold") == Path("lake/gold/runs/gold.lock")
     assert paths.bronze_search_run("2026-07-12") == Path(
         "lake/bronze/eodhd/search/run_date=2026-07-12"
     )

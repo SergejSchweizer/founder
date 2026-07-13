@@ -42,6 +42,7 @@ from founder.portfolio import (
     write_maximum_diversification,
     write_optimized_weights,
 )
+from founder.run_locks import layer_run_lock
 from founder.search import (
     approve_universe,
     normalize_name,
@@ -516,7 +517,8 @@ def _run_bronze_command(args: argparse.Namespace) -> dict[str, Any]:
 def _run_silver_command(root: Path, *, concurrency: int = 2) -> dict[str, Any]:
     paths = LakePaths(root=root)
     LOGGER.info("running silver build root=%s concurrency=%s", root, concurrency)
-    quote_rows = build_silver_quotes(paths, concurrency=concurrency)
+    with layer_run_lock(paths, "silver"):
+        quote_rows = build_silver_quotes(paths, concurrency=concurrency)
     LOGGER.info("silver build complete root=%s rows=%s", root, len(quote_rows))
     return {"concurrency": concurrency, "quote_rows": len(quote_rows)}
 
@@ -524,10 +526,11 @@ def _run_silver_command(root: Path, *, concurrency: int = 2) -> dict[str, Any]:
 def _run_gold_command(root: Path, *, concurrency: int = 2) -> dict[str, Any]:
     paths = LakePaths(root=root)
     LOGGER.info("running gold build root=%s concurrency=%s", root, concurrency)
-    quotes = read_silver_quotes(paths)
-    returns, correlations, covariances, features = write_gold_inputs(
-        paths, quotes, concurrency=concurrency
-    )
+    with layer_run_lock(paths, "gold"):
+        quotes = read_silver_quotes(paths)
+        returns, correlations, covariances, features = write_gold_inputs(
+            paths, quotes, concurrency=concurrency
+        )
     LOGGER.info(
         "gold build complete root=%s returns=%s features=%s",
         root,

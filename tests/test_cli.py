@@ -7,6 +7,7 @@ import pytest
 
 from founder.cli import main
 from founder.paths import LakePaths
+from founder.run_locks import layer_run_lock
 from founder.table_io import read_json, read_rows
 
 
@@ -620,11 +621,10 @@ def test_cli_bronze_rejects_overlapping_run(
         ]
     )
     capsys.readouterr()
-    lock_path = LakePaths(root=root).silver / "runs" / "bronze-lock.lock"
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_path.write_text("active\n", encoding="utf-8")
-
-    with pytest.raises(RuntimeError, match="bronze run already active"):
+    with (
+        layer_run_lock(LakePaths(root=root), "bronze"),
+        pytest.raises(RuntimeError, match="bronze run already active"),
+    ):
         main(
             [
                 "bronze",
@@ -710,3 +710,23 @@ def test_cli_silver_accepts_concurrency_override(
     main(["silver", "--root", str(tmp_path / "lake"), "--concurrency", "1"])
 
     assert '"concurrency": 1' in capsys.readouterr().out
+
+
+def test_cli_silver_rejects_overlapping_run(tmp_path: Path) -> None:
+    root = tmp_path / "lake"
+
+    with (
+        layer_run_lock(LakePaths(root=root), "silver"),
+        pytest.raises(RuntimeError, match="silver run already active"),
+    ):
+        main(["silver", "--root", str(root)])
+
+
+def test_cli_gold_rejects_overlapping_run(tmp_path: Path) -> None:
+    root = tmp_path / "lake"
+
+    with (
+        layer_run_lock(LakePaths(root=root), "gold"),
+        pytest.raises(RuntimeError, match="gold run already active"),
+    ):
+        main(["gold", "--root", str(root)])
