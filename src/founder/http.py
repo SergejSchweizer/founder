@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -32,6 +33,7 @@ class EodhdClient:
         self._clock = clock
         self._sleeper = sleeper
         self._last_request_at: float | None = None
+        self._request_lock = threading.Lock()
 
     def build_url(self, path: str, params: Mapping[str, str | int | float] | None = None) -> str:
         cleaned_path = path if path.startswith("/") else f"/{path}"
@@ -73,8 +75,9 @@ class EodhdClient:
         raise EodhdHttpError(f"EODHD request failed for {safe_url}") from last_error
 
     def _open(self, url: str) -> Any:
-        self._sleep_until_request_allowed()
-        self._last_request_at = self._clock()
+        with self._request_lock:
+            self._sleep_until_request_allowed()
+            self._last_request_at = self._clock()
         return urllib.request.urlopen(url, timeout=self._config.timeout_seconds)
 
     def _sleep_until_request_allowed(self) -> None:

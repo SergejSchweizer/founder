@@ -179,10 +179,23 @@ Search and Fetch have separate CLI calls. First run Search with the string to fi
 uv run founder search "UCITS ETF"
 ```
 
-Then run Fetch from the approved universe pointer. By default this fetches live EODHD quotes with gap-aware planning, writes Silver quote files, builds Gold return/correlation/covariance inputs, and archives the additional raw EODHD listing datasets currently supported by Founder. For first-time ISINs, quote fetching requests the full available history up to the run date by omitting `from` and sending `to=<run-date>`:
+Then run Fetch from the approved universe pointer. By default this fetches live EODHD quotes with gap-aware planning, writes Bronze quote/dividend/split rows, and writes Silver operational fetch metadata. For first-time ISINs, quote fetching requests the full available history up to the run date by omitting `from` and sending `to=<run-date>`:
 
 ```bash
 uv run founder fetch
+```
+
+Build Silver quotes and Gold risk inputs explicitly after Fetch:
+
+```bash
+uv run founder silver
+uv run founder gold
+```
+
+Use the refresh command when you want the three phases in one cron-friendly command:
+
+```bash
+uv run founder refresh
 ```
 
 After a full-history run has written local quotes, later live fetches check for per-ISIN quote gaps before downloading. They backfill historical gaps first, then fetch the fresh tail up to the run date:
@@ -195,7 +208,7 @@ Gap-aware Fetch reads existing Silver quote dates, expands each ISIN into the mi
 
 The gap-aware approach currently discovers windows from quote history, then applies those windows to all supported EODHD time-series datasets. Dividends and splits are archived beside quotes as dated Bronze Parquet rows under `lake/bronze/dividends/{exchange}/{year}/{ISIN}.parquet` and `lake/bronze/splits/{exchange}/{year}/{ISIN}.parquet`. Additional time-series data types should get their own strategy, coverage fields, and gap table before being added to automatic gap planning.
 
-Use `--mock` for a local no-token run that writes deterministic quote, Silver, Gold, and coverage artifacts:
+Use `--mock` for a local no-token Fetch run that writes deterministic Bronze quote and operational metadata artifacts:
 
 ```bash
 uv run founder fetch --mock
@@ -224,7 +237,7 @@ The dry run writes search candidates, a canonical universe, fetch plan, quote ro
 
 ## EODHD Request Safety
 
-Founder spaces EODHD requests by default and retries transient failures so large fetches do not hammer the API. The planned Bronze-only Fetch refactor will make Fetch safe for unattended cron execution with bounded EODHD parallelism capped at a default concurrency of `2`. Cron runs must preserve request pacing, respect `Retry-After`, use stable run ids, resume safely after partial failures, and avoid overlapping writes for the same lake root.
+Founder spaces EODHD requests by default and retries transient failures so large fetches do not hammer the API. Fetch is safe for unattended cron execution with bounded EODHD parallelism capped at a default concurrency of `2`. Cron runs preserve request pacing, respect `Retry-After`, use stable run ids, resume safely after partial failures, and avoid overlapping writes for the same lake root.
 
 Tune these values in `.env.local` when the subscription limit changes:
 

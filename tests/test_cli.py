@@ -118,12 +118,22 @@ def test_cli_runs_search_and_fetch_modules(
     )
     fetch_output = capsys.readouterr()
     assert '"fetch_plan_rows": 1' in fetch_output.out
-    assert '"quote_rows": 2' in fetch_output.out
-    assert '"return_rows": 1' in fetch_output.out
+    assert '"bronze_quote_rows": 2' in fetch_output.out
+    assert '"concurrency": 2' in fetch_output.out
 
     paths = LakePaths(root=root)
     assert read_json(paths.current_universe())["search_run_id"] == "search-cli"
     assert len(read_rows(paths.coverage())) == 1
+    assert read_rows(paths.silver_quote_file("XETRA", "IE0000000001")) == []
+    assert read_rows(paths.gold_returns("XETRA", "IE0000000001")) == []
+
+    main(["silver", "--root", str(root)])
+    silver_output = capsys.readouterr()
+    assert '"quote_rows": 2' in silver_output.out
+
+    main(["gold", "--root", str(root)])
+    gold_output = capsys.readouterr()
+    assert '"return_rows": 1' in gold_output.out
     assert len(read_rows(paths.gold_returns("XETRA", "IE0000000001"))) == 1
     assert len(read_rows(paths.gold_correlation("XETRA", "IE0000000001"))) == 1
     assert len(read_rows(paths.gold_covariance("XETRA", "IE0000000001"))) == 1
@@ -255,8 +265,8 @@ def test_cli_fetch_live_defaults_to_gap_aware_full_history(
     fetch_output = capsys.readouterr()
     assert '"fetch_plan_rows": 1' in fetch_output.out
     assert '"gap_aware": true' in fetch_output.out
-    assert '"quote_rows": 2' in fetch_output.out
-    assert '"return_rows": 1' in fetch_output.out
+    assert '"bronze_quote_rows": 2' in fetch_output.out
+    assert '"concurrency": 2' in fetch_output.out
     assert '"raw_data_payloads": 2' in fetch_output.out
     assert FakeEodhdClient.requests == [
         ("/eod/EXAMPLE.XETRA", {"fmt": "json", "to": "2026-07-12"}),
@@ -269,6 +279,12 @@ def test_cli_fetch_live_defaults_to_gap_aware_full_history(
     assert plan_row["end_date"] == "2026-07-12"
     assert plan_row["window_reason"] == "full_history"
     assert len(read_rows(paths.coverage())) == 1
+    assert read_rows(paths.silver_quote_file("XETRA", "IE0000000001")) == []
+    assert read_rows(paths.gold_returns("XETRA", "IE0000000001")) == []
+    main(["silver", "--root", str(root)])
+    capsys.readouterr()
+    main(["gold", "--root", str(root)])
+    capsys.readouterr()
     assert len(read_rows(paths.gold_returns("XETRA", "IE0000000001"))) == 1
     assert len(read_rows(paths.gold_correlation("XETRA", "IE0000000001"))) == 1
     assert len(read_rows(paths.gold_covariance("XETRA", "IE0000000001"))) == 1
@@ -407,6 +423,8 @@ def test_cli_fetch_defaults_to_gap_aware_windows(
     capsys.readouterr()
     main(["fetch", "--root", str(root), "--run-id", "fetch-full"])
     capsys.readouterr()
+    main(["silver", "--root", str(root)])
+    capsys.readouterr()
 
     FakeEodhdClient.requests = []
     main(
@@ -490,6 +508,8 @@ def test_cli_fetch_skips_non_quote_data_when_quote_plan_is_empty(
         ]
     )
     capsys.readouterr()
+    main(["silver", "--root", str(root)])
+    capsys.readouterr()
 
     FakeEodhdClient.requests = []
     main(
@@ -508,6 +528,168 @@ def test_cli_fetch_skips_non_quote_data_when_quote_plan_is_empty(
     assert '"fetch_plan_rows": 0' in fetch_output.out
     assert '"raw_data_payloads": 0' in fetch_output.out
     assert FakeEodhdClient.requests == []
+
+
+def test_cli_fetch_accepts_concurrency_override(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    root = tmp_path / "lake"
+    input_path = tmp_path / "candidates.json"
+    input_path.write_text(
+        """
+        [
+          {
+            "Code": "EXAMPLE",
+            "Exchange": "XETRA",
+            "Type": "ETF",
+            "Country": "DE",
+            "Currency": "EUR",
+            "Isin": "IE0000000001",
+            "Name": "Example UCITS ETF"
+          }
+        ]
+        """,
+        encoding="utf-8",
+    )
+    main(
+        [
+            "search",
+            "UCITS ETF",
+            "--root",
+            str(root),
+            "--input",
+            str(input_path),
+            "--search-run-id",
+            "search-cli",
+        ]
+    )
+    capsys.readouterr()
+
+    main(
+        [
+            "fetch",
+            "--root",
+            str(root),
+            "--mock",
+            "--concurrency",
+            "1",
+            "--run-date",
+            "2026-07-12",
+        ]
+    )
+
+    assert '"concurrency": 1' in capsys.readouterr().out
+
+
+def test_cli_fetch_rejects_overlapping_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    root = tmp_path / "lake"
+    input_path = tmp_path / "candidates.json"
+    input_path.write_text(
+        """
+        [
+          {
+            "Code": "EXAMPLE",
+            "Exchange": "XETRA",
+            "Type": "ETF",
+            "Country": "DE",
+            "Currency": "EUR",
+            "Isin": "IE0000000001",
+            "Name": "Example UCITS ETF"
+          }
+        ]
+        """,
+        encoding="utf-8",
+    )
+    main(
+        [
+            "search",
+            "UCITS ETF",
+            "--root",
+            str(root),
+            "--input",
+            str(input_path),
+            "--search-run-id",
+            "search-cli",
+        ]
+    )
+    capsys.readouterr()
+    lock_path = LakePaths(root=root).silver / "runs" / "fetch-lock.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.write_text("active\n", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="fetch run already active"):
+        main(
+            [
+                "fetch",
+                "--root",
+                str(root),
+                "--mock",
+                "--run-id",
+                "fetch-lock",
+                "--run-date",
+                "2026-07-12",
+            ]
+        )
+
+
+def test_cli_refresh_runs_fetch_silver_and_gold(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    root = tmp_path / "lake"
+    input_path = tmp_path / "candidates.json"
+    input_path.write_text(
+        """
+        [
+          {
+            "Code": "EXAMPLE",
+            "Exchange": "XETRA",
+            "Type": "ETF",
+            "Country": "DE",
+            "Currency": "EUR",
+            "Isin": "IE0000000001",
+            "Name": "Example UCITS ETF"
+          }
+        ]
+        """,
+        encoding="utf-8",
+    )
+    main(
+        [
+            "search",
+            "UCITS ETF",
+            "--root",
+            str(root),
+            "--input",
+            str(input_path),
+            "--search-run-id",
+            "search-cli",
+        ]
+    )
+    capsys.readouterr()
+
+    main(
+        [
+            "refresh",
+            "--root",
+            str(root),
+            "--mock",
+            "--run-date",
+            "2026-07-12",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert '"fetch_plan_rows": 1' in output
+    assert '"quote_rows": 2' in output
+    assert '"return_rows": 1' in output
+    paths = LakePaths(root=root)
+    assert len(read_rows(paths.silver_quote_file("XETRA", "IE0000000001"))) == 2
+    assert len(read_rows(paths.gold_returns("XETRA", "IE0000000001"))) == 1
 
 
 def test_cli_fetch_rejects_removed_incremental_flag() -> None:

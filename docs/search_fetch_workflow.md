@@ -123,15 +123,23 @@ Run Fetch against the approved universe. By default, `founder fetch` calls EODHD
 uv run founder fetch
 ```
 
-The planned Bronze-only Fetch refactor will make Fetch safe for unattended cron execution. Live EODHD fetching should use bounded parallelism with default concurrency `2`, while still honoring shared request pacing, retry backoff, and `Retry-After`. Cron execution should use stable run ids, be resumable after partial failures, and prevent or clearly report overlapping runs for the same lake root and run id.
+Fetch is safe for unattended cron execution. Live EODHD fetching uses bounded parallelism with default concurrency `2`, while still honoring shared request pacing, retry backoff, and `Retry-After`. Cron execution should use stable run ids, be resumable after partial failures, and prevent or clearly report overlapping runs for the same lake root and run id.
 
-`--mock` writes deterministic local quote, Silver, Gold, and coverage outputs without using an EODHD token:
+`--mock` writes deterministic local Bronze quote and operational metadata outputs without using an EODHD token:
 
 ```bash
 uv run founder fetch --mock
 ```
 
-Without `--mock`, `founder fetch` writes the fetch plan, archives live Bronze quote, dividend, and split rows through the same planned windows, normalizes Silver quotes, derives Gold returns/correlation/covariance from accumulated Silver quotes, and writes coverage rows. With `--mock`, it writes deterministic local quote, Silver, Gold, coverage, and fetch-run metadata. Optional flags such as `--root`, `--run-id`, `--start-date`, `--end-date`, `--run-date`, `--limit`, and `--isin` are available for reproducible custom runs, but they are not required.
+Without `--mock`, `founder fetch` writes the fetch plan, archives live Bronze quote, dividend, and split rows through the same planned windows, and writes coverage/fetch-run metadata. With `--mock`, it writes deterministic local Bronze quote, coverage, and fetch-run metadata. Optional flags such as `--root`, `--run-id`, `--start-date`, `--end-date`, `--run-date`, `--concurrency`, `--limit`, and `--isin` are available for reproducible custom runs, but they are not required.
+
+Build Silver quotes and Gold risk inputs after Fetch, or use Refresh to run all phases in order:
+
+```bash
+uv run founder silver
+uv run founder gold
+uv run founder refresh
+```
 
 Pass `--start-date` and/or `--end-date` only when you want to restrict the EODHD history window:
 
