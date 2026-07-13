@@ -1,4 +1,5 @@
 import csv
+import json
 
 import pytest
 
@@ -11,6 +12,7 @@ from founder.docs_refresh import (
 from founder.paths import LakePaths
 from founder.portfolio import (
     PortfolioConstraints,
+    build_risk_contribution_rows,
     build_target_weight_rows,
     equal_weight_seed,
     minimum_variance_two_asset_weight,
@@ -305,6 +307,265 @@ def test_optimized_weight_rows_and_gold_write_are_idempotent(tmp_path) -> None: 
     assert first == second
     assert [row["weight"] for row in first] == [0.8, 0.2]
     assert read_rows(paths.gold_optimized_weights("minimum_variance", "eval-1")) == first
+
+
+def test_risk_parity_selects_equal_risk_contribution_weights() -> None:
+    listings = [
+        {"isin": "IE1", "exchange": "XETRA", "code": "AAA"},
+        {"isin": "IE2", "exchange": "AS", "code": "BBB"},
+    ]
+    covariance_rows = [
+        {
+            "left_isin": "IE1",
+            "left_exchange": "XETRA",
+            "left_code": "AAA",
+            "right_isin": "IE1",
+            "right_exchange": "XETRA",
+            "right_code": "AAA",
+            "covariance": 0.01,
+        },
+        {
+            "left_isin": "IE1",
+            "left_exchange": "XETRA",
+            "left_code": "AAA",
+            "right_isin": "IE2",
+            "right_exchange": "AS",
+            "right_code": "BBB",
+            "covariance": 0.0,
+        },
+        {
+            "left_isin": "IE2",
+            "left_exchange": "AS",
+            "left_code": "BBB",
+            "right_isin": "IE1",
+            "right_exchange": "XETRA",
+            "right_code": "AAA",
+            "covariance": 0.0,
+        },
+        {
+            "left_isin": "IE2",
+            "left_exchange": "AS",
+            "left_code": "BBB",
+            "right_isin": "IE2",
+            "right_exchange": "AS",
+            "right_code": "BBB",
+            "covariance": 0.04,
+        },
+    ]
+
+    weights = optimize_portfolio(
+        listings,
+        covariance_rows,
+        {},
+        objective="risk_parity",
+        constraints=PortfolioConstraints(max_weight=0.8),
+        grid_step=0.01,
+    )
+    rows = build_risk_contribution_rows(
+        listings,
+        covariance_rows,
+        weights,
+        evaluation_id="eval-1",
+        objective="risk_parity",
+        portfolio_id="risk-parity",
+        tolerance=1e-4,
+    )
+
+    assert weights == {"IE1": pytest.approx(0.67), "IE2": pytest.approx(0.33)}
+    assert [row["percent_risk_contribution"] for row in rows] == [
+        pytest.approx(0.5075183719615601),
+        pytest.approx(0.49248162803843976),
+    ]
+    assert rows[0]["convergence_status"] == "not_converged"
+    assert rows[0]["objective_residual"] == pytest.approx(rows[1]["objective_residual"])
+
+
+def test_risk_parity_handles_correlated_assets_and_allocation_bounds() -> None:
+    listings = [
+        {"isin": "IE1", "exchange": "XETRA", "code": "AAA"},
+        {"isin": "IE2", "exchange": "AS", "code": "BBB"},
+    ]
+    covariance_rows = [
+        {
+            "left_isin": "IE1",
+            "left_exchange": "XETRA",
+            "left_code": "AAA",
+            "right_isin": "IE1",
+            "right_exchange": "XETRA",
+            "right_code": "AAA",
+            "covariance": 0.01,
+        },
+        {
+            "left_isin": "IE1",
+            "left_exchange": "XETRA",
+            "left_code": "AAA",
+            "right_isin": "IE2",
+            "right_exchange": "AS",
+            "right_code": "BBB",
+            "covariance": 0.01,
+        },
+        {
+            "left_isin": "IE2",
+            "left_exchange": "AS",
+            "left_code": "BBB",
+            "right_isin": "IE1",
+            "right_exchange": "XETRA",
+            "right_code": "AAA",
+            "covariance": 0.01,
+        },
+        {
+            "left_isin": "IE2",
+            "left_exchange": "AS",
+            "left_code": "BBB",
+            "right_isin": "IE2",
+            "right_exchange": "AS",
+            "right_code": "BBB",
+            "covariance": 0.04,
+        },
+    ]
+
+    weights = optimize_portfolio(
+        listings,
+        covariance_rows,
+        {},
+        objective="equal_risk_contribution",
+        constraints=PortfolioConstraints(max_weight=0.6),
+        grid_step=0.01,
+    )
+
+    assert weights == {"IE1": pytest.approx(0.6), "IE2": pytest.approx(0.4)}
+
+
+def test_risk_parity_reports_zero_variance_non_convergence() -> None:
+    listings = [
+        {"isin": "IE1", "exchange": "XETRA", "code": "AAA"},
+        {"isin": "IE2", "exchange": "AS", "code": "BBB"},
+    ]
+    covariance_rows = [
+        {
+            "left_isin": left,
+            "left_exchange": left_exchange,
+            "left_code": left_code,
+            "right_isin": right,
+            "right_exchange": right_exchange,
+            "right_code": right_code,
+            "covariance": 0.0,
+        }
+        for left, left_exchange, left_code in [("IE1", "XETRA", "AAA"), ("IE2", "AS", "BBB")]
+        for right, right_exchange, right_code in [("IE1", "XETRA", "AAA"), ("IE2", "AS", "BBB")]
+    ]
+    weights = optimize_portfolio(
+        listings,
+        covariance_rows,
+        {},
+        objective="risk_parity",
+        constraints=PortfolioConstraints(max_weight=0.8),
+        grid_step=0.1,
+    )
+    rows = build_risk_contribution_rows(
+        listings,
+        covariance_rows,
+        weights,
+        evaluation_id="eval-1",
+        objective="risk_parity",
+        portfolio_id="zero-var",
+    )
+
+    assert rows[0]["portfolio_variance"] == 0.0
+    assert rows[0]["convergence_status"] == "not_converged"
+    assert rows[0]["objective_residual"] == pytest.approx(0.5)
+
+
+def test_risk_parity_gold_writes_are_idempotent(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    paths = LakePaths(root=tmp_path / "lake")
+    matrix_rows = [
+        {
+            "evaluation_id": "eval-1",
+            "date": "2026-07-11",
+            "isin": "IE1",
+            "exchange": "XETRA",
+            "code": "AAA",
+            "return": 0.01,
+        },
+        {
+            "evaluation_id": "eval-1",
+            "date": "2026-07-11",
+            "isin": "IE2",
+            "exchange": "AS",
+            "code": "BBB",
+            "return": 0.03,
+        },
+    ]
+    covariance_rows = [
+        {
+            "left_isin": "IE1",
+            "left_exchange": "XETRA",
+            "left_code": "AAA",
+            "right_isin": "IE1",
+            "right_exchange": "XETRA",
+            "right_code": "AAA",
+            "covariance": 0.01,
+        },
+        {
+            "left_isin": "IE1",
+            "left_exchange": "XETRA",
+            "left_code": "AAA",
+            "right_isin": "IE2",
+            "right_exchange": "AS",
+            "right_code": "BBB",
+            "covariance": 0.0,
+        },
+        {
+            "left_isin": "IE2",
+            "left_exchange": "AS",
+            "left_code": "BBB",
+            "right_isin": "IE1",
+            "right_exchange": "XETRA",
+            "right_code": "AAA",
+            "covariance": 0.0,
+        },
+        {
+            "left_isin": "IE2",
+            "left_exchange": "AS",
+            "left_code": "BBB",
+            "right_isin": "IE2",
+            "right_exchange": "AS",
+            "right_code": "BBB",
+            "covariance": 0.04,
+        },
+    ]
+    write_rows(paths.gold_return_matrix("eval-1"), matrix_rows)
+    write_rows(paths.gold_covariance("XETRA", "IE1"), covariance_rows[:2])
+    write_rows(paths.gold_covariance("AS", "IE2"), covariance_rows[2:])
+
+    first = write_optimized_weights(
+        paths,
+        evaluation_id="eval-1",
+        objective="risk_parity",
+        portfolio_id="risk-parity",
+        constraints=PortfolioConstraints(max_weight=0.8),
+        grid_step=0.01,
+        risk_budget_tolerance=1e-3,
+    )
+    second = write_optimized_weights(
+        paths,
+        evaluation_id="eval-1",
+        objective="risk_parity",
+        portfolio_id="risk-parity",
+        constraints=PortfolioConstraints(max_weight=0.8),
+        grid_step=0.01,
+        risk_budget_tolerance=1e-3,
+    )
+
+    risk_rows = read_rows(paths.gold_risk_contributions("risk_parity", "eval-1"))
+    diagnostics = json.loads(str(first[0]["diagnostics"]))
+    assert first == second
+    assert [row["weight"] for row in first] == [pytest.approx(0.67), pytest.approx(0.33)]
+    assert read_rows(paths.gold_optimized_weights("risk_parity", "eval-1")) == first
+    assert len(risk_rows) == 2
+    assert risk_rows[0]["convergence_status"] == "converged"
+    assert diagnostics["convergence_status"] == "converged"
+    assert diagnostics["risk_parity_residual"] == pytest.approx(risk_rows[0]["objective_residual"])
 
 
 def test_flatex_orders_are_deterministic_and_exportable(tmp_path) -> None:  # type: ignore[no-untyped-def]

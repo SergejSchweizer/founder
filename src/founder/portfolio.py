@@ -13,6 +13,7 @@ from founder.table_io import JsonRow, read_rows, write_rows
 
 ListingKey = tuple[str, str, str]
 MAX_EXACT_WEIGHT_CANDIDATES = 20_000
+RISK_PARITY_OBJECTIVES = {"risk_parity", "equal_risk_contribution"}
 
 
 @dataclass(frozen=True)
@@ -98,7 +99,12 @@ def optimize_portfolio(
     if objective == "equal_weight":
         return equal_weight_seed([isin for isin, _, _ in ordered], constraints)
 
-    if objective not in {"minimum_variance", "maximum_sharpe", "target_return_minimum_variance"}:
+    if objective not in {
+        "minimum_variance",
+        "maximum_sharpe",
+        "target_return_minimum_variance",
+        *RISK_PARITY_OBJECTIVES,
+    }:
         raise ValueError(f"unknown optimization objective: {objective}")
     if objective == "target_return_minimum_variance" and target_return is None:
         raise ValueError("target_return is required")
@@ -131,12 +137,21 @@ def optimize_portfolio(
                 tuple(-weight for weight in weights),
             ),
         )
-    else:
+    elif objective == "target_return_minimum_variance":
         best = min(
             feasible,
             key=lambda weights: (
                 _portfolio_variance(ordered, weights, covariances),
                 abs(_portfolio_return(ordered, weights, expected_returns) - target_value),
+                weights,
+            ),
+        )
+    else:
+        best = min(
+            feasible,
+            key=lambda weights: (
+                _risk_parity_residual(ordered, weights, covariances),
+                _portfolio_variance(ordered, weights, covariances),
                 weights,
             ),
         )
@@ -184,6 +199,7 @@ def write_optimized_weights(
     risk_free_rate: float = 0.0,
     target_return: float | None = None,
     grid_step: float = 0.01,
+    risk_budget_tolerance: float = 1e-6,
 ) -> list[JsonRow]:
     matrix_rows = read_rows(paths.gold_return_matrix(evaluation_id))
     listings = _listing_rows(matrix_rows)
@@ -201,11 +217,29 @@ def write_optimized_weights(
     )
     ordered = _listing_keys(listings)
     ordered_weights = tuple(weights[isin] for isin, _, _ in ordered)
-    diagnostics = {
+    diagnostics: JsonRow = {
         "risk_free_rate": risk_free_rate,
         "target_return": target_return,
         "expected_return": _portfolio_return(ordered, ordered_weights, expected_returns),
     }
+    if objective in RISK_PARITY_OBJECTIVES:
+        risk_rows = build_risk_contribution_rows(
+            listings,
+            covariance_rows,
+            weights,
+            evaluation_id=evaluation_id,
+            objective=objective,
+            portfolio_id=portfolio_id,
+            tolerance=risk_budget_tolerance,
+        )
+        diagnostics["risk_parity_residual"] = _risk_contribution_residual(risk_rows)
+        diagnostics["convergence_status"] = (
+            "converged"
+            if float(diagnostics["risk_parity_residual"]) <= risk_budget_tolerance
+            else "not_converged"
+        )
+    else:
+        risk_rows = []
     rows = build_target_weight_rows(
         listings,
         weights,
@@ -224,7 +258,69 @@ def write_optimized_weights(
         paths.gold_optimized_weights(objective, evaluation_id),
         sorted([*existing, *rows], key=lambda row: (str(row["portfolio_id"]), str(row["isin"]))),
     )
+    if risk_rows:
+        existing_risk_rows = [
+            row
+            for row in read_rows(paths.gold_risk_contributions(objective, evaluation_id))
+            if str(row["portfolio_id"]) != portfolio_id
+        ]
+        write_rows(
+            paths.gold_risk_contributions(objective, evaluation_id),
+            sorted(
+                [*existing_risk_rows, *risk_rows],
+                key=lambda row: (str(row["portfolio_id"]), str(row["isin"])),
+            ),
+        )
     return rows
+
+
+def build_risk_contribution_rows(
+    listings: Sequence[Mapping[str, Any]],
+    covariance_rows: Sequence[Mapping[str, Any]],
+    weights: Mapping[str, float],
+    *,
+    evaluation_id: str,
+    objective: str,
+    portfolio_id: str,
+    tolerance: float = 1e-6,
+) -> list[JsonRow]:
+    ordered = _listing_keys(listings)
+    covariances = _covariance_map(covariance_rows)
+    ordered_weights = tuple(float(weights[isin]) for isin, _, _ in ordered)
+    portfolio_variance = _portfolio_variance(ordered, ordered_weights, covariances)
+    target_budget = 1.0 / len(ordered)
+    contribution_rows: list[JsonRow] = []
+    for listing, weight in zip(ordered, ordered_weights, strict=True):
+        marginal = _marginal_risk_contribution(listing, ordered, ordered_weights, covariances)
+        absolute = weight * marginal
+        percent = 0.0 if portfolio_variance == 0 else absolute / portfolio_variance
+        contribution_rows.append(
+            {
+                "evaluation_id": evaluation_id,
+                "objective": objective,
+                "portfolio_id": portfolio_id,
+                "isin": listing[0],
+                "exchange": listing[1],
+                "code": listing[2],
+                "weight": weight,
+                "marginal_risk_contribution": marginal,
+                "absolute_risk_contribution": absolute,
+                "percent_risk_contribution": percent,
+                "target_risk_budget": target_budget,
+                "risk_budget_residual": percent - target_budget,
+                "portfolio_variance": portfolio_variance,
+            }
+        )
+    residual = _risk_contribution_residual(contribution_rows)
+    status = "converged" if residual <= tolerance else "not_converged"
+    return [
+        {
+            **row,
+            "objective_residual": residual,
+            "convergence_status": status,
+        }
+        for row in contribution_rows
+    ]
 
 
 def _listing_keys(listings: Sequence[Mapping[str, Any]]) -> list[ListingKey]:
@@ -329,6 +425,37 @@ def _portfolio_variance(
         for right, right_weight in zip(listings, weights, strict=True):
             variance += left_weight * right_weight * covariances.get((left, right), 0.0)
     return variance
+
+
+def _marginal_risk_contribution(
+    listing: ListingKey,
+    listings: Sequence[ListingKey],
+    weights: Sequence[float],
+    covariances: Mapping[tuple[ListingKey, ListingKey], float],
+) -> float:
+    return sum(
+        weight * covariances.get((listing, right), 0.0)
+        for right, weight in zip(listings, weights, strict=True)
+    )
+
+
+def _risk_parity_residual(
+    listings: Sequence[ListingKey],
+    weights: Sequence[float],
+    covariances: Mapping[tuple[ListingKey, ListingKey], float],
+) -> float:
+    variance = _portfolio_variance(listings, weights, covariances)
+    target = 1.0 / len(listings)
+    residual = 0.0
+    for listing, weight in zip(listings, weights, strict=True):
+        marginal = _marginal_risk_contribution(listing, listings, weights, covariances)
+        percent = 0.0 if variance == 0 else (weight * marginal) / variance
+        residual += (percent - target) ** 2
+    return residual
+
+
+def _risk_contribution_residual(rows: Sequence[Mapping[str, Any]]) -> float:
+    return sum(float(row["risk_budget_residual"]) ** 2 for row in rows)
 
 
 def _sharpe_score(

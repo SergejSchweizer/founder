@@ -118,5 +118,8 @@ class LakePaths:
     def gold_optimized_weights(self, objective: str, evaluation_id: str) -> Path:
         return self.gold / "weights" / objective / f"{evaluation_id}.parquet"
 
+    def gold_risk_contributions(self, objective: str, evaluation_id: str) -> Path:
+        return self.gold / "risk_contributions" / objective / f"{evaluation_id}.parquet"
+
     def current_universe(self) -> Path:
         return self.silver / "universe" / "current_universe.json"
