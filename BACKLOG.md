@@ -239,7 +239,7 @@ Idempotency: Recomputing the same portfolio id from the same return matrix and w
 
 ### PR18. Portfolio Module: Core Optimization Objectives And Target Weights
 
-Git status: in progress. PR: TBD.
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/26.
 
 Priority: P0 first optimizer.
 
