@@ -1,15 +1,17 @@
-"""Fetch planning, quote normalization, raw EODHD data, and coverage manifests.
+"""Fetch planning, Bronze EODHD ingestion, and coverage manifests.
 
 The Fetch module starts at Search's approved `canonical_universe` contract. It
 validates that contract, derives EODHD symbols, records raw or near-raw Bronze
-quote and other EODHD data, normalizes quote rows for Silver, and
-logs non-secret errors, and writes metadata manifests that show coverage. It
-does not perform fuzzy instrument discovery.
+quote and other EODHD data, logs non-secret errors, and writes metadata manifests
+that show coverage. It does not perform fuzzy instrument discovery or write
+analytical Silver and Gold outputs.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -366,6 +368,7 @@ def fetch_quotes_to_bronze(
     *,
     run_date: date,
     fetcher: QuoteFetcher,
+    concurrency: int = 2,
 ) -> tuple[list[JsonRow], list[JsonRow]]:
     """Fetch planned EOD quote payloads into Bronze.
 
@@ -379,6 +382,7 @@ def fetch_quotes_to_bronze(
         plan,
         run_date=run_date,
         fetcher=fetcher,
+        concurrency=concurrency,
     )
 
 
@@ -389,11 +393,12 @@ def fetch_eodhd_dataset_to_bronze(
     *,
     run_date: date,
     fetcher: QuoteFetcher,
+    concurrency: int = 2,
 ) -> tuple[list[JsonRow], list[JsonRow]]:
     """Fetch one EODHD dataset into Bronze using its dataset strategy."""
-    successes: list[JsonRow] = []
-    errors: list[JsonRow] = []
-    for item in plan:
+    worker_count = max(1, concurrency)
+
+    def fetch_one(item: Mapping[str, Any]) -> tuple[JsonRow | None, JsonRow | None]:
         started_at = monotonic()
         try:
             fetched_rows = list(fetcher(item))
@@ -417,14 +422,12 @@ def fetch_eodhd_dataset_to_bronze(
                         key_fields=("isin", "exchange", "code", "date"),
                     ),
                 )
-            successes.append(
-                {
-                    **dict(item),
-                    "data_type": strategy.name,
-                    "elapsed_seconds": elapsed_seconds,
-                    "rows": len(fetched_rows),
-                }
-            )
+            success = {
+                **dict(item),
+                "data_type": strategy.name,
+                "elapsed_seconds": elapsed_seconds,
+                "rows": len(fetched_rows),
+            }
             LOGGER.debug(
                 "EODHD rows written symbol=%s dataset=%s rows=%s elapsed_seconds=%.3f",
                 item["symbol"],
@@ -432,19 +435,18 @@ def fetch_eodhd_dataset_to_bronze(
                 len(fetched_rows),
                 elapsed_seconds,
             )
+            return success, None
         except Exception as error:  # noqa: BLE001 - record and continue batch failures.
             elapsed_seconds = monotonic() - started_at
-            errors.append(
-                {
-                    "run_id": str(item["run_id"]),
-                    "code": str(item["code"]),
-                    "elapsed_seconds": elapsed_seconds,
-                    "exchange": str(item["exchange"]),
-                    "endpoint": strategy.endpoint,
-                    "error_type": type(error).__name__,
-                    "message": str(error),
-                }
-            )
+            failure = {
+                "run_id": str(item["run_id"]),
+                "code": str(item["code"]),
+                "elapsed_seconds": elapsed_seconds,
+                "exchange": str(item["exchange"]),
+                "endpoint": strategy.endpoint,
+                "error_type": type(error).__name__,
+                "message": str(error),
+            }
             LOGGER.warning(
                 "EODHD fetch failed symbol=%s dataset=%s elapsed_seconds=%.3f error=%s",
                 item["symbol"],
@@ -452,11 +454,36 @@ def fetch_eodhd_dataset_to_bronze(
                 elapsed_seconds,
                 error,
             )
+            return None, failure
+
+    successes_by_index: dict[int, JsonRow] = {}
+    errors_by_index: dict[int, JsonRow] = {}
+    if worker_count == 1:
+        for index, item in enumerate(plan):
+            success, failure = fetch_one(item)
+            if success is not None:
+                successes_by_index[index] = success
+            if failure is not None:
+                errors_by_index[index] = failure
+    else:
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            futures = {executor.submit(fetch_one, item): index for index, item in enumerate(plan)}
+            for future in as_completed(futures):
+                index = futures[future]
+                success, failure = future.result()
+                if success is not None:
+                    successes_by_index[index] = success
+                if failure is not None:
+                    errors_by_index[index] = failure
+
+    successes = [successes_by_index[index] for index in sorted(successes_by_index)]
+    errors = [errors_by_index[index] for index in sorted(errors_by_index)]
     LOGGER.info(
-        "bronze EODHD fetch complete dataset=%s successes=%s errors=%s",
+        "bronze EODHD fetch complete dataset=%s successes=%s errors=%s concurrency=%s",
         strategy.name,
         len(successes),
         len(errors),
+        worker_count,
     )
     return successes, errors
 
@@ -501,6 +528,7 @@ def fetch_raw_eodhd_datasets_to_bronze(
     *,
     run_date: date,
     fetchers: Mapping[str, RawDataFetcher],
+    concurrency: int = 2,
 ) -> tuple[list[JsonRow], list[JsonRow]]:
     """Archive planned raw per-symbol EODHD datasets that are not normalized yet."""
     successes: list[JsonRow] = []
@@ -514,6 +542,7 @@ def fetch_raw_eodhd_datasets_to_bronze(
             plan,
             run_date=run_date,
             fetcher=fetcher,
+            concurrency=concurrency,
         )
         successes.extend(dataset_successes)
         errors.extend(dataset_errors)
@@ -692,3 +721,19 @@ def write_fetch_manifests(
     write_csv(paths.coverage().with_suffix(".csv"), coverage, required_fields("coverage"))
     LOGGER.info("fetch manifests written run_id=%s coverage_rows=%s", run_id, len(coverage))
     return coverage
+
+
+@contextmanager
+def fetch_run_lock(paths: LakePaths, run_id: str) -> Iterator[Path]:
+    """Create a simple lock file so cron runs do not overlap for one run id."""
+    lock_path = paths.silver / "runs" / f"{run_id}.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with lock_path.open("x", encoding="utf-8") as lock_file:
+            lock_file.write(datetime.now(UTC).replace(microsecond=0).isoformat() + "\n")
+    except FileExistsError as error:
+        raise RuntimeError(f"fetch run already active: {run_id}") from error
+    try:
+        yield lock_path
+    finally:
+        lock_path.unlink(missing_ok=True)

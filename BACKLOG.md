@@ -181,7 +181,7 @@ Idempotency: The final dry run is safe to execute repeatedly in a clean workspac
 
 ### PR14. Fetch Process: Cron-Safe Bronze Ingestion And Medallion Builds
 
-Git status: not started. PR: TBD.
+Git status: in progress. PR: TBD.
 
 Depends on: PR13.
 
