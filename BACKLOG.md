@@ -253,7 +253,7 @@ Idempotency: Re-running the same optimization id with unchanged evaluation input
 
 ### PR19. Portfolio Module: Risk Parity And Equal Risk Contribution
 
-Git status: in progress. PR: local branch `feat/pr19-risk-parity`.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/32.
 
 Priority: P1 robust optimizer.
 
