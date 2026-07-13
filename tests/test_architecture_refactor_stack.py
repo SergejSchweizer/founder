@@ -24,6 +24,31 @@ def test_internal_evaluation_and_portfolio_boundaries_preserve_public_imports() 
     assert objectives.optimize_portfolio.__module__ == "founder.portfolio"
 
 
+def test_internal_boundary_modules_expose_declared_reexports() -> None:
+    module_names = [
+        "founder.evaluation_parts.backtest",
+        "founder.evaluation_parts.frontier",
+        "founder.evaluation_parts.matrix",
+        "founder.evaluation_parts.metrics",
+        "founder.evaluation_parts.portfolio_returns",
+        "founder.evaluation_parts.rebalance",
+        "founder.evaluation_parts.tail_risk",
+        "founder.portfolio_parts.constraints",
+        "founder.portfolio_parts.diversification",
+        "founder.portfolio_parts.hrp",
+        "founder.portfolio_parts.objectives",
+        "founder.portfolio_parts.risk_parity",
+    ]
+
+    for module_name in module_names:
+        module = importlib.import_module(module_name)
+
+        assert module.__all__
+        assert all(
+            getattr(module, name).__module__.startswith("founder.") for name in module.__all__
+        )
+
+
 def test_job_manifest_redacts_secrets_and_gold_writes_compatibility_manifest(
     tmp_path: Path,
 ) -> None:
