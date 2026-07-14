@@ -16,11 +16,13 @@ Last reviewed: 2026-07-14
 
 This backlog captures known work that should stay visible across sessions. Keep entries short, actionable, and tied to risks or decisions where possible.
 
-Every PR-sized backlog item must include `Git status` and `PR`. Use `Git status: not started` and `PR: TBD` until work begins.
+Every non-merged PR-sized backlog item must include `Branch`, `Git status`, and `PR`. Use a branch path such as `feat/selection-cli`, `Git status: not started`, and `PR: TBD` until work begins. Historical merged entries do not require branch-path backfills.
 
 ## How To Use This Backlog
 
-Read this after the architecture and workflow docs when you need implementation status. This file should not explain module behavior in depth; it records scope, dependencies, acceptance criteria, idempotency expectations, Git status, and PR links for trackable work.
+Read this after the architecture and workflow docs when you need implementation status. This file should not explain module behavior in depth; it records scope, dependencies, acceptance criteria, idempotency expectations, branch paths, Git status, and PR links for trackable work.
+
+Use `<type>/<scope>-<short-description>` branch paths with one of `feat`, `fix`, `refactor`, `docs`, or `chore`. Every open PR series must end with a `Series Completion Gate` that names its final branch, requires a Conventional Commit squash subject, and lists the mandatory `main-quality` checks.
 
 ## Search And Bronze Module PR Stack
 
@@ -562,6 +564,8 @@ Priority policy: Replace the technical-layer workflow surface with three domain 
 
 ### PR40. Three-Module Boundaries And Public Contract Skeleton
 
+Branch: `refactor/three-module-boundaries`.
+
 Git status: not started. PR: TBD.
 
 Priority: P0 architecture foundation.
@@ -577,6 +581,8 @@ Determinism: Public DTO equality and hashes use typed canonical payloads with ex
 Idempotency: Importing modules, constructing services, registering parsers, and running architecture checks are read-only. Repeating package setup creates no lake artifacts, pointers, locks, network requests, or compatibility-state changes.
 
 ### PR41. Refresh Catalog Contracts And Stable Instrument Identities
+
+Branch: `feat/refresh-catalog-contracts`.
 
 Git status: not started. PR: TBD.
 
@@ -594,6 +600,8 @@ Idempotency: Rebuilding contracts and paths from identical normalized records pr
 
 ### PR42. Refresh Complete EODHD Catalog Synchronization
 
+Branch: `feat/refresh-catalog-sync`.
+
 Git status: not started. PR: TBD.
 
 Priority: P0 complete all-ISIN discovery.
@@ -609,6 +617,8 @@ Determinism: Equivalent provider payloads produce the same normalized snapshot, 
 Idempotency: Repeating or resuming a catalog run reuses completed raw and normalized artifacts, requests only missing work, and publishes no duplicate snapshot or pointer update. A failed completeness check leaves the prior current Refresh pointer unchanged.
 
 ### PR43. Refresh All-ISIN Market Data And Versioned Inputs
+
+Branch: `feat/refresh-all-isin-market-data`.
 
 Git status: not started. PR: TBD.
 
@@ -626,6 +636,8 @@ Idempotency: Repeating Refresh with unchanged provider data performs no duplicat
 
 ### PR44. Refresh Service, Standalone CLI, And Atomic Publication
 
+Branch: `feat/refresh-cli`.
+
 Git status: not started. PR: TBD.
 
 Priority: P0 operable Refresh module.
@@ -641,6 +653,8 @@ Determinism: `RefreshPlan` and content ids depend on normalized request fields, 
 Idempotency: Re-running `founder-refresh run` with unchanged data resolves to the existing immutable snapshot and leaves the current pointer unchanged. Interrupted runs resume incomplete plan items, and pointer publication uses compare-and-swap so an older run cannot overwrite a newer successful Refresh.
 
 ### PR45. Selection Predicate And Metric-Requirement Contracts
+
+Branch: `feat/selection-predicate-contracts`.
 
 Git status: not started. PR: TBD.
 
@@ -658,6 +672,8 @@ Idempotency: Predicate compilation and evaluation are pure and read-only. Rebuil
 
 ### PR46. Selection Identity, Candidate And Final Membership Contracts
 
+Branch: `feat/selection-membership-contracts`.
+
 Git status: not started. PR: TBD.
 
 Priority: P0 durable Selection lifecycle.
@@ -673,6 +689,8 @@ Determinism: Selection names, ids, candidate and final membership ids, member or
 Idempotency: Creating, refreshing, activating, or finalizing the same Selection against unchanged inputs resolves to existing immutable artifacts without duplicate rows or pointer churn. A changed candidate or final membership writes a new version and never mutates prior membership content; failed compare-and-swap leaves the newer pointer untouched.
 
 ### PR47. Selection Service, Current Pointer, And Standalone CLI
+
+Branch: `feat/selection-cli`.
 
 Git status: not started. PR: TBD.
 
@@ -692,6 +710,8 @@ Idempotency: Repeating `create`, `refresh`, or `use` with unchanged inputs resol
 
 ### PR48. Update Contracts, Pinned Inputs, And Shared Work Planner
 
+Branch: `feat/update-work-planner`.
+
 Git status: not started. PR: TBD.
 
 Priority: P0 Update execution foundation.
@@ -710,6 +730,8 @@ Idempotency: Replanning unchanged pinned inputs yields the same plan and perform
 
 ### PR49. Update Incremental Per-ISIN Metric Cache
 
+Branch: `feat/update-asset-metric-cache`.
+
 Git status: not started. PR: TBD.
 
 Priority: P0 reusable candidate metrics.
@@ -725,6 +747,8 @@ Determinism: Asset keys include listing id, exact quote/dividend/split/NAV input
 Idempotency: Re-running Update with unchanged candidates and inputs reuses immutable asset artifacts. Verified append-only changes update online state and newly closed periods only; backfills, corrections, deletions, and policy changes rebuild only affected listing artifacts. Concurrent requests for one key publish one valid artifact.
 
 ### PR50. Update Screening Classifications And Selection Finalization
+
+Branch: `feat/update-screening-classifications`.
 
 Git status: not started. PR: TBD.
 
@@ -748,6 +772,8 @@ Idempotency: Re-evaluating identical candidates, inputs, benchmark, and profiles
 
 ### PR51. Update Incremental Pair Metric Cache
 
+Branch: `feat/update-pair-metric-cache`.
+
 Git status: not started. PR: TBD.
 
 Priority: P0 reusable final-member pair metrics.
@@ -763,6 +789,8 @@ Determinism: Pair identity, orientation, bucket assignment, common-date order, o
 Idempotency: Re-running overlapping Updates with unchanged final memberships references the same pair artifacts without symmetric duplicates or recomputation. Append-only runs consume each newly common observation once; corrections rebuild only affected pair keys.
 
 ### PR52. Update Selection Calendar And Comparable Metric Cache
+
+Branch: `feat/update-selection-calendar`.
 
 Git status: not started. PR: TBD.
 
@@ -780,6 +808,8 @@ Idempotency: Rebuilding an unchanged calendar and comparable metrics reuses immu
 
 ### PR53. Update Evaluation Profiles And Selection Analysis Manifests
 
+Branch: `feat/update-evaluation-profiles`.
+
 Git status: not started. PR: TBD.
 
 Priority: P0 current-Selection analytical outputs.
@@ -795,6 +825,8 @@ Determinism: Profile expansion, optimizer inputs, analysis ids, output ordering,
 Idempotency: Re-running the same final membership and profile resolves to the same analysis manifest without recomputation. Partial failures resume missing outputs and cannot mutate completed artifacts or prior analyses.
 
 ### PR54. Update Service, Standalone CLI, And Atomic Publication
+
+Branch: `feat/update-cli`.
 
 Git status: not started. PR: TBD.
 
@@ -814,6 +846,8 @@ Idempotency: Repeating `founder-update run` with unchanged current Selection and
 
 ### PR55. Three-Module Cutover, Legacy Migration, And Documentation
 
+Branch: `refactor/three-module-cutover`.
+
 Git status: not started. PR: TBD.
 
 Priority: P0 production cutover.
@@ -829,6 +863,14 @@ Acceptance: A full mocked integration test runs the three commands as separate p
 Determinism: The same provider content, Refresh snapshot, Selection definition, candidate, benchmark, profiles, and Update settings produce the same memberships, plans, artifacts, analyses, migration mapping, and logical CLI results before and after restart. Compatibility warnings and deprecation dates are versioned.
 
 Idempotency: Repeating migration or the full Refresh-Selection-Update cycle with unchanged inputs creates no duplicate snapshots, memberships, metrics, analyses, or pointer changes. A resumed command executes only its own module's incomplete work and never triggers hidden work in another module.
+
+### Series Completion Gate
+
+Final branch: `refactor/three-module-cutover`.
+
+Squash rule: The final PR title and squash commit subject must use `type(optional-scope): subject`.
+
+Required main merge gate: `main-quality` must pass Ruff lint and format, Pyright strict, Pytest, coverage of at least 95%, Import Linter, and schema validation. The series remains incomplete while any stacked PR is unmerged or the final gate is not green.
 
 ## Future Work After Finalization
 
