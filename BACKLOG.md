@@ -562,6 +562,8 @@ Idempotency: New gates are read-only and deterministic. Running the gate multipl
 
 Priority policy: Replace the technical-layer workflow surface with three domain modules and three CLI namespaces: `refresh` discovers every provider-visible ISIN and maintains catalog plus market-data snapshots; `selection` defines, persists, and activates deterministic conjunctive selections without network or metric computation; `update` computes and reuses metrics only for the current Selection, asks `selection` to finalize metric predicates, and publishes analyses. Each module owns its contracts, application service, ports, adapters, CLI parser, locks, manifests, and current pointer. Dependency direction is strict: `refresh` imports neither other domain module; `selection` may consume only public Refresh contracts/read ports; `update` consumes public Refresh and Selection contracts/services; no reverse imports are allowed. Standalone entry points `founder-refresh`, `founder-selection`, and `founder-update` and equivalent `founder refresh`, `founder selection`, and `founder update` namespaces delegate to the same module-owned parsers. PR40 through PR55 are a strict stack: base each branch on the preceding branch until it merges, then restack all downstream branches. Preserve current commands through explicit compatibility adapters until PR55 performs the documented cutover.
 
+Delivery order is determined first by dependency and then by unblocking value: PR40 establishes package boundaries; PR41 through PR44 stabilize the Refresh, Selection, and Update public contracts before side effects; PR45 through PR47 make the global Refresh source operational; PR48 exposes Selection; PR49 and PR50 produce and apply candidate evidence; PR51 establishes exact-calendar portfolio comparability before PR52 adds pairwise similarity statistics; PR53 and PR54 integrate analyses and execution; PR55 performs migration and cutover. Every PR depends directly on its predecessor so the declared order and stacked branch ancestry remain identical.
+
 ### PR40. Three-Module Boundaries And Public Contract Skeleton
 
 Branch: `refactor/three-module-boundaries`.
@@ -598,61 +600,7 @@ Determinism: Canonical JSON, normalized identifiers, explicit contract versions,
 
 Idempotency: Rebuilding contracts and paths from identical normalized records produces the same immutable ids and logical rows without duplicate members or pointer churn. Contract validation and read-port access never mutate Refresh, Selection, or Update state.
 
-### PR42. Refresh Complete EODHD Catalog Synchronization
-
-Branch: `feat/refresh-catalog-sync`.
-
-Git status: not started. PR: TBD.
-
-Priority: P0 complete all-ISIN discovery.
-
-Depends on: PR41.
-
-Scope: Implement the Refresh catalog service and EODHD adapter to enumerate every configured exchange symbol list without a name query, archive raw responses per exchange in Bronze, normalize all provider-visible listings, and publish an immutable Silver catalog snapshot. Add bounded, resumable metadata enrichment for fields absent from bulk lists, including declared distribution policy and historical-NAV capability when the provider exposes them. Record expected, completed, failed, and skipped exchanges and enrichments plus completeness policy results. Keep rows without an ISIN in review output, but exclude them from the market-data universe. Do not create Selections, compute metrics, or depend on Selection criteria.
-
-Acceptance: Mocked provider and service tests cover all configured exchanges, duplicate symbols, multiple listings per ISIN, partial provider failure, retries and `Retry-After`, resume after interruption, missing ISINs, disappeared listings, incomplete enrichment, token redaction, and rejection of an incomplete snapshot. Summaries report listing, unique-ISIN, missing-ISIN, exchange, enrichment, NAV-capability, and error counts. No Search query or active Selection can restrict catalog synchronization.
-
-Determinism: Equivalent provider payloads produce the same normalized snapshot, conflicts, and snapshot id regardless of response order, exchange completion order, worker scheduling, or retry history. Provider raw artifacts are keyed by provider, exchange, and response content rather than completion time.
-
-Idempotency: Repeating or resuming a catalog run reuses completed raw and normalized artifacts, requests only missing work, and publishes no duplicate snapshot or pointer update. A failed completeness check leaves the prior current Refresh pointer unchanged.
-
-### PR43. Refresh All-ISIN Market Data And Versioned Inputs
-
-Branch: `feat/refresh-all-isin-market-data`.
-
-Git status: not started. PR: TBD.
-
-Priority: P0 catalog-wide data completeness.
-
-Depends on: PR42.
-
-Scope: Implement Refresh market-data planning for every active eligible unique ISIN in the current catalog, independent of every Selection. Resolve one deterministic canonical listing per ISIN and record explicit exclusions for missing, invalid, inactive, or provider-unsupported listings. Fetch gap-aware EOD quotes, dividends, splits, and historical NAV when supported with bounded concurrency, retries, partial-failure isolation, and full-history first load. Normalize Silver quote rows containing raw `close` and `adjusted_close`, dividend payment date with ex-date fallback, split ratios, and genuine split-adjusted NAV without substituting market price. Publish immutable per-listing dataset versions with parent ids, content fingerprints, date coverage, and `added`, `corrected`, and `deleted` change sets; group them into a `MarketDataVersionSet` only after atomic validation.
-
-Acceptance: Tests prove every eligible catalog ISIN is planned exactly once, duplicate listings resolve consistently, Selection membership has no effect, and exclusions have stable reason codes. Fixtures cover full-history load, appended tails, historical gaps, raw-close and adjusted-close corrections, dividends, payment-date fallback, splits, NAV present or unavailable, deletions, duplicate provider rows, interrupted writes, and a correction with unchanged row count and last date. Failed validation cannot expose partial Bronze, Silver, version-manifest, or version-set state.
-
-Determinism: Canonical listing choice, plan ordering, exclusion reasons, gap windows, normalized rows, fingerprints, change classifications, and version-set ids depend only on catalog policy, provider observations, prior immutable versions, and requested as-of date. Row order, task completion order, file encoding, locale, and process count cannot change logical outputs.
-
-Idempotency: Repeating Refresh with unchanged provider data performs no duplicate downloads where content-addressed raw data is reusable, writes no new logical Silver versions or version set, and leaves pointers stable. Resume consumes only unfinished plan items; corrections rebuild only affected listing datasets and never mutate prior versions.
-
-### PR44. Refresh Service, Standalone CLI, And Atomic Publication
-
-Branch: `feat/refresh-cli`.
-
-Git status: not started. PR: TBD.
-
-Priority: P0 operable Refresh module.
-
-Depends on: PR43.
-
-Scope: Add module-owned `RefreshRequest`, `RefreshPlan`, `RefreshRunManifest`, `RefreshResult`, and compare-and-swap `CurrentRefreshPointer` contracts. Implement `founder.refresh.service` orchestration and the standalone `founder-refresh` CLI with `plan`, `run`, and `status`; register equivalent `founder refresh` routing without duplicating parser or handler logic. `run` defaults to all configured exchanges and every eligible catalog ISIN and supports explicit `--as-of`, `--run-id`, `--concurrency`, `--resume`, `--dry-run`, and `--debug`. It may synchronize the catalog and update Bronze/Silver market data, but it must never read the current Selection, compute Gold metrics, or invoke Update. Acquire one Refresh run lock per lake root, retain per-request retry limits, write resumable manifests, and publish the current Refresh snapshot atomically only when configured completeness requirements pass.
-
-Acceptance: Dedicated CLI tests cover each command, argument, default, JSON result, `--debug`, dry-run with no writes, invalid dates, lock contention, partial provider failure, incomplete snapshots, resume, and successful current-pointer publication. Service tests call the same application API without parsing argv. An end-to-end mocked Refresh discovers ISINs, updates every eligible listing's required datasets, reports exclusions and coverage, and produces no Selection or metric artifacts. Existing legacy commands remain available through the compatibility route until PR55.
-
-Determinism: `RefreshPlan` and content ids depend on normalized request fields, prior Refresh snapshot, provider content, and explicit as-of date; generated run ids and operational timestamps are metadata only. CLI argument order and standalone versus umbrella invocation produce identical requests and logical outputs.
-
-Idempotency: Re-running `founder-refresh run` with unchanged data resolves to the existing immutable snapshot and leaves the current pointer unchanged. Interrupted runs resume incomplete plan items, and pointer publication uses compare-and-swap so an older run cannot overwrite a newer successful Refresh.
-
-### PR45. Selection Predicate And Metric-Requirement Contracts
+### PR42. Selection Predicate And Metric-Requirement Contracts
 
 Branch: `feat/selection-predicate-contracts`.
 
@@ -660,7 +608,7 @@ Git status: not started. PR: TBD.
 
 Priority: P0 deterministic Selection semantics.
 
-Depends on: PR44.
+Depends on: PR41.
 
 Scope: In `founder.selection.contracts`, define typed `Predicate`, `PredicateValue`, `FilterPhase`, `FieldDefinition`, `MetricRequirement`, `MetricEvidence`, `ClassificationProfileRef`, and `BenchmarkRef` contracts. Build a strict field registry and compiler supporting `eq`, `ne`, `in`, `not-in`, `contains`, `starts-with`, `regex`, `lt`, `lte`, `gt`, `gte`, `between`, `is-null`, and `not-null` only where valid for the field type. Combine predicates conjunctively; values inside one `in` predicate are alternatives. Separate catalog predicates, raw-metric predicates, and classification predicates. Catalog fields come from public Refresh contracts; Selection itself owns the names, types, operators, availability rules, and evidence requirements for metric fields, while Update later produces that evidence. Use parameterized DuckDB reads over immutable Refresh catalog Parquet files; reject raw SQL, unknown metadata paths, implicit casts, and unavailable-value-as-zero behavior.
 
@@ -670,7 +618,7 @@ Determinism: Canonical predicate JSON sorts normalized predicates by phase, fiel
 
 Idempotency: Predicate compilation and evaluation are pure and read-only. Rebuilding views or evaluating identical catalog rows and metric evidence produces the same result without changing Refresh snapshots, metric artifacts, Selection pointers, or lake data.
 
-### PR46. Selection Identity, Candidate And Final Membership Contracts
+### PR43. Selection Identity, Candidate And Final Membership Contracts
 
 Branch: `feat/selection-membership-contracts`.
 
@@ -678,7 +626,7 @@ Git status: not started. PR: TBD.
 
 Priority: P0 durable Selection lifecycle.
 
-Depends on: PR45.
+Depends on: PR42.
 
 Scope: Add immutable `SelectionDefinition`, `CandidateMembership`, `FinalMembership`, `SelectionState`, `CurrentSelectionPointer`, and `MetricEvidenceManifestRef` contracts plus Selection repository ports. Derive `selection_id` from canonical catalog, raw-metric, and classification predicates, canonical-listing policy, metric and classification profile references, and optional benchmark listing id. Derive `candidate_membership_id` from ordered canonical listing ids after catalog predicates and pin its source `catalog_snapshot_id`, not a market-data version set. Finalization is a public pure Selection service that accepts one candidate id plus a complete typed metric-evidence manifest, validates evidence versions and availability, applies remaining predicates, and derives `membership_id`; Update must call this service rather than implementing filter semantics. Catalog-only Selections finalize immediately. Metric-dependent Selections remain `pending_update` until valid evidence arrives. Store active, paused, archived, empty, pending, ready, and stale states and use compare-and-swap current pointers.
 
@@ -688,27 +636,7 @@ Determinism: Selection names, ids, candidate and final membership ids, member or
 
 Idempotency: Creating, refreshing, activating, or finalizing the same Selection against unchanged inputs resolves to existing immutable artifacts without duplicate rows or pointer churn. A changed candidate or final membership writes a new version and never mutates prior membership content; failed compare-and-swap leaves the newer pointer untouched.
 
-### PR47. Selection Service, Current Pointer, And Standalone CLI
-
-Branch: `feat/selection-cli`.
-
-Git status: not started. PR: TBD.
-
-Priority: P0 operable Selection module.
-
-Depends on: PR46.
-
-Scope: Implement `founder.selection.service` and the standalone `founder-selection` CLI with `fields`, `create`, `list`, `show`, `use`, `refresh`, `diff`, and `status`; register equivalent `founder selection` routing through the module-owned parser. `create` persists an immutable definition and evaluates catalog predicates against a pinned Refresh snapshot. `use` atomically makes exactly one Selection the current Selection for default Update execution and may point to a `pending_update`, `ready`, or empty Selection while exposing that state. `refresh` recomputes candidate membership against an explicitly chosen or current Refresh snapshot but does not download data or compute metrics. Metric-dependent creation and refresh emit exact `MetricRequirement` rows for Update. All commands support structured JSON output and `--debug` without importing Update or provider adapters.
-
-Scope continued: Generate a readable Selection name from all normalized `field_operator_value` fragments joined by underscores, truncate only at fragment boundaries, and append a short `selection_id` suffix. Require an explicit benchmark when predicates need downside capture or composite risk type. Expose current candidate id, current final membership id if ready, Refresh snapshot id, pending metric requirements, lifecycle state, and stale status in every relevant result. The CLI never silently changes the current Selection during `create` or `refresh`; only `use` changes that pointer.
-
-Acceptance: Dedicated CLI tests cover every command, field and repeated-filter syntax, names, lifecycle transitions, current-pointer changes, pending and ready output, empty results, invalid benchmark requirements, stale Refresh snapshots, diffs, `--debug`, and standalone versus umbrella equivalence. Tests prove only `use` changes the current pointer, catalog-only Selections become ready without Update, metric Selections stay pending, and neither CLI nor service performs a network call or writes metric artifacts.
-
-Determinism: Standalone and umbrella invocations normalize to the same typed command requests. The same definition and Refresh snapshot yield the same Selection, candidate membership, requirements, names, ordering, and JSON domain payload regardless of argument order or machine; only explicitly operational fields may differ.
-
-Idempotency: Repeating `create`, `refresh`, or `use` with unchanged inputs resolves to existing definitions, memberships, requirements, and pointer values. Interrupted persistence cannot expose a definition without its candidate membership, and compare-and-swap prevents an older command from replacing a newer current Selection.
-
-### PR48. Update Contracts, Pinned Inputs, And Shared Work Planner
+### PR44. Update Contracts, Pinned Inputs, And Shared Work Planner
 
 Branch: `feat/update-work-planner`.
 
@@ -716,7 +644,7 @@ Git status: not started. PR: TBD.
 
 Priority: P0 Update execution foundation.
 
-Depends on: PR47.
+Depends on: PR43.
 
 Scope: In `founder.update.contracts`, add immutable, versioned `UpdateRequest`, `PinnedUpdateInput`, `MetricSpec`, `MetricCacheKey`, `MetricArtifactRef`, `UpdatePlan`, `UpdateRunManifest`, `UpdateResult`, and `CurrentUpdatePointer` contracts. An Update defaults to the current Selection but pins the exact `selection_id`, `candidate_membership_id`, current `RefreshSnapshotRef`, benchmark, as-of date, metric profile, and classification profile before planning. Require the Refresh snapshot's `catalog_snapshot_id` to equal the candidate's source catalog id; otherwise return `selection_stale` and require an explicit `founder selection refresh` rather than changing membership inside Update. A compatible newer market-data version set for the same catalog is valid. Build a pure work planner from Selection-owned `MetricRequirement` rows. It unions identical asset, benchmark-relative, classification, pair, calendar, and analysis keys across requested work, marks each as hit, append delta, rebuild, missing, blocked, or oversized, and orders dependencies explicitly. Update owns metric artifacts and manifests but does not own Selection predicate semantics, catalog downloads, or current-Selection changes.
 
@@ -727,6 +655,80 @@ Acceptance: Contract and planner tests cover no current Selection, pending and r
 Determinism: Plan ids, cache keys, dependency order, hit decisions, stale decisions, and manifests derive only from pinned contract ids, canonical metric specs, algorithm versions, and immutable input versions. Selection order, filesystem discovery order, worker scheduling, and operational timestamps cannot change logical plans or artifact identities.
 
 Idempotency: Replanning unchanged pinned inputs yields the same plan and performs no writes. Executing or resuming a plan computes each missing key once, reuses completed immutable artifacts, and never republishes unchanged evidence or pointers. A failed or stale run cannot roll back newer Selection, Refresh, or Update state.
+
+### PR45. Refresh Complete EODHD Catalog Synchronization
+
+Branch: `feat/refresh-catalog-sync`.
+
+Git status: not started. PR: TBD.
+
+Priority: P0 complete all-ISIN discovery.
+
+Depends on: PR44.
+
+Scope: Implement the Refresh catalog service and EODHD adapter to enumerate every configured exchange symbol list without a name query, archive raw responses per exchange in Bronze, normalize all provider-visible listings, and publish an immutable Silver catalog snapshot. Add bounded, resumable metadata enrichment for fields absent from bulk lists, including declared distribution policy and historical-NAV capability when the provider exposes them. Record expected, completed, failed, and skipped exchanges and enrichments plus completeness policy results. Keep rows without an ISIN in review output, but exclude them from the market-data universe. Do not create Selections, compute metrics, or depend on Selection criteria.
+
+Acceptance: Mocked provider and service tests cover all configured exchanges, duplicate symbols, multiple listings per ISIN, partial provider failure, retries and `Retry-After`, resume after interruption, missing ISINs, disappeared listings, incomplete enrichment, token redaction, and rejection of an incomplete snapshot. Summaries report listing, unique-ISIN, missing-ISIN, exchange, enrichment, NAV-capability, and error counts. No Search query or active Selection can restrict catalog synchronization.
+
+Determinism: Equivalent provider payloads produce the same normalized snapshot, conflicts, and snapshot id regardless of response order, exchange completion order, worker scheduling, or retry history. Provider raw artifacts are keyed by provider, exchange, and response content rather than completion time.
+
+Idempotency: Repeating or resuming a catalog run reuses completed raw and normalized artifacts, requests only missing work, and publishes no duplicate snapshot or pointer update. A failed completeness check leaves the prior current Refresh pointer unchanged.
+
+### PR46. Refresh All-ISIN Market Data And Versioned Inputs
+
+Branch: `feat/refresh-all-isin-market-data`.
+
+Git status: not started. PR: TBD.
+
+Priority: P0 catalog-wide data completeness.
+
+Depends on: PR45.
+
+Scope: Implement Refresh market-data planning for every active eligible unique ISIN in the current catalog, independent of every Selection. Resolve one deterministic canonical listing per ISIN and record explicit exclusions for missing, invalid, inactive, or provider-unsupported listings. Fetch gap-aware EOD quotes, dividends, splits, and historical NAV when supported with bounded concurrency, retries, partial-failure isolation, and full-history first load. Normalize Silver quote rows containing raw `close` and `adjusted_close`, dividend payment date with ex-date fallback, split ratios, and genuine split-adjusted NAV without substituting market price. Publish immutable per-listing dataset versions with parent ids, content fingerprints, date coverage, and `added`, `corrected`, and `deleted` change sets; group them into a `MarketDataVersionSet` only after atomic validation.
+
+Acceptance: Tests prove every eligible catalog ISIN is planned exactly once, duplicate listings resolve consistently, Selection membership has no effect, and exclusions have stable reason codes. Fixtures cover full-history load, appended tails, historical gaps, raw-close and adjusted-close corrections, dividends, payment-date fallback, splits, NAV present or unavailable, deletions, duplicate provider rows, interrupted writes, and a correction with unchanged row count and last date. Failed validation cannot expose partial Bronze, Silver, version-manifest, or version-set state.
+
+Determinism: Canonical listing choice, plan ordering, exclusion reasons, gap windows, normalized rows, fingerprints, change classifications, and version-set ids depend only on catalog policy, provider observations, prior immutable versions, and requested as-of date. Row order, task completion order, file encoding, locale, and process count cannot change logical outputs.
+
+Idempotency: Repeating Refresh with unchanged provider data performs no duplicate downloads where content-addressed raw data is reusable, writes no new logical Silver versions or version set, and leaves pointers stable. Resume consumes only unfinished plan items; corrections rebuild only affected listing datasets and never mutate prior versions.
+
+### PR47. Refresh Service, Standalone CLI, And Atomic Publication
+
+Branch: `feat/refresh-cli`.
+
+Git status: not started. PR: TBD.
+
+Priority: P0 operable Refresh module.
+
+Depends on: PR46.
+
+Scope: Add module-owned `RefreshRequest`, `RefreshPlan`, `RefreshRunManifest`, `RefreshResult`, and compare-and-swap `CurrentRefreshPointer` contracts. Implement `founder.refresh.service` orchestration and the standalone `founder-refresh` CLI with `plan`, `run`, and `status`; register equivalent `founder refresh` routing without duplicating parser or handler logic. `run` defaults to all configured exchanges and every eligible catalog ISIN and supports explicit `--as-of`, `--run-id`, `--concurrency`, `--resume`, `--dry-run`, and `--debug`. It may synchronize the catalog and update Bronze/Silver market data, but it must never read the current Selection, compute Gold metrics, or invoke Update. Acquire one Refresh run lock per lake root, retain per-request retry limits, write resumable manifests, and publish the current Refresh snapshot atomically only when configured completeness requirements pass.
+
+Acceptance: Dedicated CLI tests cover each command, argument, default, JSON result, `--debug`, dry-run with no writes, invalid dates, lock contention, partial provider failure, incomplete snapshots, resume, and successful current-pointer publication. Service tests call the same application API without parsing argv. An end-to-end mocked Refresh discovers ISINs, updates every eligible listing's required datasets, reports exclusions and coverage, and produces no Selection or metric artifacts. Existing legacy commands remain available through the compatibility route until PR55.
+
+Determinism: `RefreshPlan` and content ids depend on normalized request fields, prior Refresh snapshot, provider content, and explicit as-of date; generated run ids and operational timestamps are metadata only. CLI argument order and standalone versus umbrella invocation produce identical requests and logical outputs.
+
+Idempotency: Re-running `founder-refresh run` with unchanged data resolves to the existing immutable snapshot and leaves the current pointer unchanged. Interrupted runs resume incomplete plan items, and pointer publication uses compare-and-swap so an older run cannot overwrite a newer successful Refresh.
+
+### PR48. Selection Service, Current Pointer, And Standalone CLI
+
+Branch: `feat/selection-cli`.
+
+Git status: not started. PR: TBD.
+
+Priority: P0 operable Selection module.
+
+Depends on: PR47.
+
+Scope: Implement `founder.selection.service` and the standalone `founder-selection` CLI with `fields`, `create`, `list`, `show`, `use`, `refresh`, `diff`, and `status`; register equivalent `founder selection` routing through the module-owned parser. `create` persists an immutable definition and evaluates catalog predicates against a pinned Refresh snapshot. `use` atomically makes exactly one Selection the current Selection for default Update execution and may point to a `pending_update`, `ready`, or empty Selection while exposing that state. `refresh` recomputes candidate membership against an explicitly chosen or current Refresh snapshot but does not download data or compute metrics. Metric-dependent creation and refresh emit exact `MetricRequirement` rows for Update. All commands support structured JSON output and `--debug` without importing Update or provider adapters.
+
+Scope continued: Generate a readable Selection name from all normalized `field_operator_value` fragments joined by underscores, truncate only at fragment boundaries, and append a short `selection_id` suffix. Require an explicit benchmark when predicates need downside capture or composite risk type. Expose current candidate id, current final membership id if ready, Refresh snapshot id, pending metric requirements, lifecycle state, and stale status in every relevant result. The CLI never silently changes the current Selection during `create` or `refresh`; only `use` changes that pointer.
+
+Acceptance: Dedicated CLI tests cover every command, field and repeated-filter syntax, names, lifecycle transitions, current-pointer changes, pending and ready output, empty results, invalid benchmark requirements, stale Refresh snapshots, diffs, `--debug`, and standalone versus umbrella equivalence. Tests prove only `use` changes the current pointer, catalog-only Selections become ready without Update, metric Selections stay pending, and neither CLI nor service performs a network call or writes metric artifacts.
+
+Determinism: Standalone and umbrella invocations normalize to the same typed command requests. The same definition and Refresh snapshot yield the same Selection, candidate membership, requirements, names, ordering, and JSON domain payload regardless of argument order or machine; only explicitly operational fields may differ.
+
+Idempotency: Repeating `create`, `refresh`, or `use` with unchanged inputs resolves to existing definitions, memberships, requirements, and pointer values. Interrupted persistence cannot expose a definition without its candidate membership, and compare-and-swap prevents an older command from replacing a newer current Selection.
 
 ### PR49. Update Incremental Per-ISIN Metric Cache
 
@@ -770,25 +772,7 @@ Determinism: Raw metric keys remain independent of filter and classification thr
 
 Idempotency: Re-evaluating identical candidates, inputs, benchmark, and profiles reuses raw, benchmark-relative, classification, evidence, and final-membership artifacts. Ordinary filter-threshold changes reapply Selection predicates without recomputing unchanged raw metrics; profile or benchmark changes invalidate only dependent labels and evidence.
 
-### PR51. Update Incremental Pair Metric Cache
-
-Branch: `feat/update-pair-metric-cache`.
-
-Git status: not started. PR: TBD.
-
-Priority: P0 reusable final-member pair metrics.
-
-Depends on: PR50.
-
-Scope: Add Update's lazy Pair Metric Cache for pairs requested by the ready final membership. Derive `pair_id` from sorted distinct listing ids so symmetric and same-listing pairs are never computed twice. Persist exact pairwise common-date metadata and mergeable online state for sample covariance, incremental Pearson, and approximate online Spearman, including left and right input versions, metric-spec hash, observation count, first and last common dates, and common-date-set hash. Update only newly common observations for verified append-only deltas; rebuild affected pair state for historical corrections, deletions, or incompatible date sets. Bucket artifacts deterministically and preserve sparse threshold and top-k edge modes with explicit maximum-pair and memory guards.
-
-Acceptance: For final Selection A `{A,B,C}` and B `{B,C,D}`, tests prove pair B/C is reused, only missing D pairs are new, and each unordered pair executes once per key. Tests cover one-sided appended dates, newly common dates, no-common-date deltas, backfills, corrections, same-ISIN cross-listings, empty intersections, sparse limits, pair-limit failures, cache corruption, concurrent requests, and prohibition of candidate-only or filtered-out pair work.
-
-Determinism: Pair identity, orientation, bucket assignment, common-date order, online state, edge order, and cache decisions are stable across Selection order, process count, input row order, and worker scheduling. Approximate Spearman records an explicit algorithm and sketch version.
-
-Idempotency: Re-running overlapping Updates with unchanged final memberships references the same pair artifacts without symmetric duplicates or recomputation. Append-only runs consume each newly common observation once; corrections rebuild only affected pair keys.
-
-### PR52. Update Selection Calendar And Comparable Metric Cache
+### PR51. Update Selection Calendar And Comparable Metric Cache
 
 Branch: `feat/update-selection-calendar`.
 
@@ -796,7 +780,7 @@ Git status: not started. PR: TBD.
 
 Priority: P0 comparable portfolio inputs.
 
-Depends on: PR51.
+Depends on: PR50.
 
 Scope: Add an Update-owned `SelectionCalendar` contract deriving the exact common adjusted-close return-date intersection for a ready final membership and date policy, plus `calendar_id` from ordered dates and policy version. Build aligned long-format return matrices only for final members. Add comparable asset, covariance, and correlation artifacts keyed by listing or sorted pair, exact calendar id, and metric spec. Keep these separate from pairwise-intersection statistics: pair metrics may support similarity search, but portfolio covariance can be reused only when every member uses the identical Selection calendar. Record explicit empty, insufficient-history, and scale-limit outcomes instead of plausible zeros.
 
@@ -805,6 +789,24 @@ Acceptance: Tests prove every matrix member has exactly the same ordered dates, 
 Determinism: Calendar ids, aligned row order, counts, comparable keys, matrix rows, covariance rows, and diagnostics are stable for the same final membership, input versions, and date policy. Set iteration, filesystem discovery, and worker scheduling cannot affect them.
 
 Idempotency: Rebuilding an unchanged calendar and comparable metrics reuses immutable artifacts. A changed calendar creates a new version without mutating pairwise cache artifacts, prior calendars, or prior Selection analyses.
+
+### PR52. Update Incremental Pair Metric Cache
+
+Branch: `feat/update-pair-metric-cache`.
+
+Git status: not started. PR: TBD.
+
+Priority: P0 reusable final-member pair metrics.
+
+Depends on: PR51.
+
+Scope: Add Update's lazy Pair Metric Cache for pairs requested by the ready final membership. Derive `pair_id` from sorted distinct listing ids so symmetric and same-listing pairs are never computed twice. Persist exact pairwise common-date metadata and mergeable online state for sample covariance, incremental Pearson, and approximate online Spearman, including left and right input versions, metric-spec hash, observation count, first and last common dates, and common-date-set hash. Update only newly common observations for verified append-only deltas; rebuild affected pair state for historical corrections, deletions, or incompatible date sets. Bucket artifacts deterministically and preserve sparse threshold and top-k edge modes with explicit maximum-pair and memory guards.
+
+Acceptance: For final Selection A `{A,B,C}` and B `{B,C,D}`, tests prove pair B/C is reused, only missing D pairs are new, and each unordered pair executes once per key. Tests cover one-sided appended dates, newly common dates, no-common-date deltas, backfills, corrections, same-ISIN cross-listings, empty intersections, sparse limits, pair-limit failures, cache corruption, concurrent requests, and prohibition of candidate-only or filtered-out pair work.
+
+Determinism: Pair identity, orientation, bucket assignment, common-date order, online state, edge order, and cache decisions are stable across Selection order, process count, input row order, and worker scheduling. Approximate Spearman records an explicit algorithm and sketch version.
+
+Idempotency: Re-running overlapping Updates with unchanged final memberships references the same pair artifacts without symmetric duplicates or recomputation. Append-only runs consume each newly common observation once; corrections rebuild only affected pair keys.
 
 ### PR53. Update Evaluation Profiles And Selection Analysis Manifests
 
@@ -836,7 +838,7 @@ Depends on: PR53.
 
 Scope: Implement `founder.update.service` and the standalone `founder-update` CLI with `plan`, `run`, and `status`; register equivalent `founder update` routing through the same module-owned parser. By default, `run` resolves exactly the current Selection, pins its candidate and current Refresh snapshot, computes or reuses candidate asset and benchmark evidence, invokes Selection finalization, computes pair/calendar/analysis outputs only for ready final members, and atomically publishes the Update result. Support explicit `--selection`, `--as-of`, `--metric-profile`, `--classification-profile`, `--concurrency`, `--resume`, `--dry-run`, `--run-id`, and `--debug`. Update must not invoke Refresh, make provider calls, mutate the current Selection definition, or update every saved Selection implicitly.
 
-Scope continued: Write resumable run manifests with pinned inputs, plan id, cache hits, misses, deltas, rebuilds, blocked keys, candidate and final counts, availability reasons, scale diagnostics, output refs, and redacted failures. Acquire the Update and per-key locks defined in PR48. On publication, compare-and-swap against both the pinned current Selection candidate and pinned current Refresh snapshot; mark superseded work `stale_not_published` while retaining reusable immutable artifacts. Expose machine-readable exit status for no current Selection, pending data, empty final membership, stale run, partial failure, and success.
+Scope continued: Write resumable run manifests with pinned inputs, plan id, cache hits, misses, deltas, rebuilds, blocked keys, candidate and final counts, availability reasons, scale diagnostics, output refs, and redacted failures. Acquire the Update and per-key locks defined in PR44. On publication, compare-and-swap against both the pinned current Selection candidate and pinned current Refresh snapshot; mark superseded work `stale_not_published` while retaining reusable immutable artifacts. Expose machine-readable exit status for no current Selection, pending data, empty final membership, stale run, partial failure, and success.
 
 Acceptance: Dedicated CLI and service tests cover every command, option, default, JSON result, `--debug`, no-current-Selection failure, catalog-only and metric-dependent Selections, dry-run, cache reuse, append deltas, corrections, benchmark requirements, finalization, empty membership, lock contention, partial failure, resume, stale publication, and standalone versus umbrella equivalence. An end-to-end mocked flow proves Update computes metrics only for the current Selection candidate set, then pair and portfolio metrics only for its final members, without network calls or artifacts for unrelated catalog ISINs or saved Selections.
 
