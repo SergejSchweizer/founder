@@ -111,6 +111,9 @@ def test_gold_evaluation_schema_contracts_are_registered() -> None:
         "return",
     )
     assert "annualized_volatility" in required_fields("asset_metrics")
+    assert "sharpe_ratio" in required_fields("asset_metrics")
+    assert "sortino_ratio" in required_fields("asset_metrics")
+    assert "cvar" in required_fields("asset_metrics")
     assert "input_snapshot_date" in required_fields("gold_runs")
     assert "drawdown_duration" in required_fields("drawdowns")
     assert "frontier_point_id" in required_fields("frontier_points")
