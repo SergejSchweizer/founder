@@ -252,6 +252,10 @@ SCHEMAS: dict[str, tuple[str, ...]] = {
         "downside_deviation",
         "sharpe_ratio",
         "sortino_ratio",
+        "confidence_level",
+        "var",
+        "cvar",
+        "tail_observation_count",
     ),
     "portfolio_returns": (
         "evaluation_id",

@@ -88,7 +88,7 @@ Portfolio evaluation datasets belong in Gold because they are derived from valid
 Gold evaluation datasets include:
 
 - `evaluation/return_matrices/{evaluation_id}.parquet`: aligned long-format date, ISIN, exchange, code, and return rows used as the portfolio evaluation base.
-- `evaluation/asset_metrics/{evaluation_id}.parquet`: observation counts, first and last return dates, annualized return, annualized volatility, downside deviation, Sharpe ratio, and Sortino ratio by listing.
+- `evaluation/asset_metrics/{evaluation_id}.parquet`: observation counts, first and last return dates, annualized return, annualized volatility, downside deviation, Sharpe ratio, Sortino ratio, and historical daily-loss VaR/CVaR by listing. VaR and CVaR include their confidence level and tail observation count and use the same aligned return dates as the other asset metrics.
 - `evaluation/portfolio_returns/{evaluation_id}.parquet`: weighted portfolio return and cumulative wealth series for candidate portfolios.
 - `evaluation/drawdowns/{evaluation_id}/{portfolio_id}.parquet`: cumulative wealth, running peak, drawdown, drawdown duration, recovery duration, and recovery state by date.
 - `evaluation/portfolio_metrics/{evaluation_id}.parquet`: portfolio-level return, volatility, Sharpe, Sortino, maximum drawdown, Calmar ratio, ulcer index, turnover, and post-cost metrics.

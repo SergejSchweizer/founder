@@ -40,6 +40,7 @@ from founder.portfolio import (
     write_optimized_weights,
 )
 from founder.run_locks import layer_run_lock
+from founder.schemas import required_fields
 from founder.search import (
     approve_universe,
     normalize_name,
@@ -60,6 +61,15 @@ LOGGER = get_logger(__name__)
 
 ConfigLoader = Callable[[], Any]
 ClientFactory = Callable[[Any], EodhdClient]
+
+
+def _asset_metrics_are_current(rows: Sequence[Mapping[str, Any]], confidence_level: float) -> bool:
+    required = required_fields("asset_metrics")
+    return bool(rows) and all(
+        all(field in row for field in required)
+        and float(row["confidence_level"]) == confidence_level
+        for row in rows
+    )
 
 
 def generated_run_id(prefix: str, value: str | None = None, run_date: date | None = None) -> str:
@@ -299,11 +309,19 @@ def run_evaluate_workflow(
     matrix = read_rows(paths.gold_return_matrix(evaluation_id))
     if matrix:
         asset_metrics = read_rows(paths.gold_asset_metrics(evaluation_id))
-        if not asset_metrics:
-            asset_metrics = build_asset_metrics(matrix, evaluation_id)
+        if not _asset_metrics_are_current(asset_metrics, confidence_level):
+            asset_metrics = build_asset_metrics(
+                matrix,
+                evaluation_id,
+                confidence_level=confidence_level,
+            )
             write_rows(paths.gold_asset_metrics(evaluation_id), asset_metrics)
     else:
-        matrix, asset_metrics = write_evaluation_outputs(paths, evaluation_id=evaluation_id)
+        matrix, asset_metrics = write_evaluation_outputs(
+            paths,
+            evaluation_id=evaluation_id,
+            confidence_level=confidence_level,
+        )
     if matrix:
         portfolio_returns, drawdowns, portfolio_metrics = write_portfolio_evaluation(
             paths,

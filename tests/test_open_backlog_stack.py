@@ -317,3 +317,34 @@ def test_evaluate_cli_frontier_handles_empty_return_matrix(
     assert '"portfolio_return_rows": 0' in output
     assert '"frontier_point_rows": 2' in output
     assert read_rows(paths.gold_frontier_points("default"))[0]["is_feasible"] is False
+
+
+def test_evaluate_cli_rebuilds_asset_tail_risk_for_requested_confidence(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    paths = LakePaths(root=tmp_path / "lake")
+    _prepare_lake(paths)
+    write_rows(
+        paths.gold_asset_metrics("eval-1"),
+        [{"evaluation_id": "eval-1", "isin": "IE1", "sharpe_ratio": 1.0}],
+    )
+
+    command = [
+        "evaluate",
+        "--root",
+        str(paths.root),
+        "--evaluation-id",
+        "eval-1",
+        "--confidence-level",
+        "0.8",
+    ]
+    main(command)
+    capsys.readouterr()
+    first = read_rows(paths.gold_asset_metrics("eval-1"))
+    main(command)
+    capsys.readouterr()
+
+    assert read_rows(paths.gold_asset_metrics("eval-1")) == first
+    assert [row["isin"] for row in first] == ["IE1", "IE2"]
+    assert all(row["confidence_level"] == 0.8 for row in first)
+    assert all("cvar" in row and "sharpe_ratio" in row and "sortino_ratio" in row for row in first)

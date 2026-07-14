@@ -149,7 +149,7 @@ Founder aims to compare optimization techniques with reproducible Gold datasets 
 Portfolio analysis and evaluation computations include:
 
 - aligned return matrices by date and listing;
-- asset metrics such as observation count, mean return, annualized return, annualized volatility, downside deviation, Sharpe ratio, and Sortino ratio;
+- asset metrics such as observation count, mean return, annualized return, annualized volatility, downside deviation, Sharpe ratio, Sortino ratio, and historical daily-loss CVaR at an explicit confidence level;
 - portfolio return series, cumulative wealth, drawdown series, maximum drawdown, drawdown duration, recovery duration, Calmar ratio, and ulcer index;
 - efficient-frontier points and long-format frontier weights;
 - constrained minimum-variance, maximum-Sharpe comparison, and target-return minimum-variance weights;

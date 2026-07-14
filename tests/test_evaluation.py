@@ -73,8 +73,40 @@ def test_asset_metrics_handle_zero_variance_and_downside_returns() -> None:
     assert metrics[0]["annualized_volatility"] == 0.0
     assert metrics[0]["sharpe_ratio"] == 0.0
     assert metrics[0]["sortino_ratio"] == 0.0
+    assert metrics[0]["confidence_level"] == 0.95
+    assert metrics[0]["cvar"] == pytest.approx(-0.01)
+    assert metrics[0]["tail_observation_count"] == 2
     assert metrics[1]["downside_deviation"] > 0.0
     assert metrics[1]["sortino_ratio"] > 0.0
+    assert metrics[1]["var"] == pytest.approx(0.02)
+    assert metrics[1]["cvar"] == pytest.approx(0.02)
+
+
+def test_asset_metrics_include_tail_risk_for_every_isin() -> None:
+    matrix = build_return_matrix(
+        [
+            _return_row(isin, exchange, code, f"2026-07-{day:02d}", daily_return)
+            for isin, exchange, code, returns in (
+                ("IE1", "XETRA", "AAA", [-0.05, 0.01, 0.02, -0.02, 0.03]),
+                ("IE2", "AS", "BBB", [-0.10, 0.04, -0.03, 0.02, 0.01]),
+            )
+            for day, daily_return in enumerate(returns, start=10)
+        ],
+        "eval-1",
+    )
+
+    metrics = build_asset_metrics(matrix, "eval-1", confidence_level=0.8)
+
+    assert [row["isin"] for row in metrics] == ["IE1", "IE2"]
+    assert all("sharpe_ratio" in row and "sortino_ratio" in row for row in metrics)
+    assert all(row["confidence_level"] == 0.8 for row in metrics)
+    assert [row["cvar"] for row in metrics] == pytest.approx([0.05, 0.10])
+    assert [row["tail_observation_count"] for row in metrics] == [1, 1]
+
+
+def test_asset_metrics_reject_invalid_cvar_confidence_level() -> None:
+    with pytest.raises(ValueError, match="confidence_level"):
+        build_asset_metrics([], "eval-1", confidence_level=1.0)
 
 
 def test_write_evaluation_outputs_is_idempotent(tmp_path: Path) -> None:

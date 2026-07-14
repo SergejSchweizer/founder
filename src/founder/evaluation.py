@@ -56,6 +56,20 @@ def _ratio(numerator: float, denominator: float) -> float:
     return 0.0 if denominator == 0 else numerator / denominator
 
 
+def _historical_tail_risk(
+    returns: Sequence[float], confidence_level: float
+) -> tuple[float, float, int]:
+    if not 0 < confidence_level < 1:
+        raise ValueError("confidence_level must be in (0, 1)")
+    losses = sorted(-item for item in returns)
+    if not losses:
+        return 0.0, 0.0, 0
+    threshold_index = min(len(losses) - 1, int(confidence_level * len(losses)))
+    var = losses[threshold_index]
+    tail = [loss for loss in losses if loss >= var]
+    return var, sum(tail) / len(tail), len(tail)
+
+
 def equal_weight_portfolio(matrix_rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
     isins = sorted({str(row["isin"]) for row in matrix_rows})
     if not isins:
@@ -85,8 +99,13 @@ def validate_portfolio_weights(
 
 
 def build_asset_metrics(
-    matrix_rows: Sequence[Mapping[str, Any]], evaluation_id: str
+    matrix_rows: Sequence[Mapping[str, Any]],
+    evaluation_id: str,
+    *,
+    confidence_level: float = 0.95,
 ) -> list[JsonRow]:
+    if not 0 < confidence_level < 1:
+        raise ValueError("confidence_level must be in (0, 1)")
     by_listing: dict[tuple[str, str, str], list[Mapping[str, Any]]] = {}
     for row in matrix_rows:
         key = (str(row["isin"]), str(row["exchange"]), str(row["code"]))
@@ -107,6 +126,7 @@ def build_asset_metrics(
         )
         annualized_return = mean_return * ANNUAL_TRADING_DAYS
         annualized_volatility = volatility * sqrt(ANNUAL_TRADING_DAYS)
+        var, cvar, tail_observation_count = _historical_tail_risk(returns, confidence_level)
         metrics.append(
             {
                 "evaluation_id": evaluation_id,
@@ -122,6 +142,10 @@ def build_asset_metrics(
                 "downside_deviation": downside_deviation,
                 "sharpe_ratio": _ratio(annualized_return, annualized_volatility),
                 "sortino_ratio": _ratio(annualized_return, downside_deviation),
+                "confidence_level": confidence_level,
+                "var": var,
+                "cvar": cvar,
+                "tail_observation_count": tail_observation_count,
             }
         )
     return metrics
@@ -230,10 +254,13 @@ def build_portfolio_metrics(
 
 
 def write_evaluation_outputs(
-    paths: LakePaths, *, evaluation_id: str = "default"
+    paths: LakePaths,
+    *,
+    evaluation_id: str = "default",
+    confidence_level: float = 0.95,
 ) -> tuple[list[JsonRow], list[JsonRow]]:
     matrix = build_return_matrix(read_gold_returns(paths), evaluation_id)
-    metrics = build_asset_metrics(matrix, evaluation_id)
+    metrics = build_asset_metrics(matrix, evaluation_id, confidence_level=confidence_level)
     write_rows(paths.gold_return_matrix(evaluation_id), matrix)
     write_rows(paths.gold_asset_metrics(evaluation_id), metrics)
     return matrix, metrics
@@ -588,8 +615,6 @@ def build_tail_risk_rows(
     weights: Mapping[str, float],
     confidence_level: float,
 ) -> list[JsonRow]:
-    if not 0 < confidence_level < 1:
-        raise ValueError("confidence_level must be in (0, 1)")
     returns = [
         float(row["return"])
         for row in build_portfolio_returns(
@@ -599,13 +624,9 @@ def build_tail_risk_rows(
             weights=weights,
         )
     ]
-    losses = sorted([-item for item in returns])
-    if not losses:
+    var, cvar, tail_observation_count = _historical_tail_risk(returns, confidence_level)
+    if not returns:
         return []
-    threshold_index = min(len(losses) - 1, int(confidence_level * len(losses)))
-    var = losses[threshold_index]
-    tail = [loss for loss in losses if loss >= var]
-    cvar = sum(tail) / len(tail)
     return [
         {
             "run_id": run_id,
@@ -614,8 +635,8 @@ def build_tail_risk_rows(
             "confidence_level": confidence_level,
             "var": var,
             "cvar": cvar,
-            "tail_observation_count": len(tail),
-            "scenario_count": len(losses),
+            "tail_observation_count": tail_observation_count,
+            "scenario_count": len(returns),
         }
     ]
 
