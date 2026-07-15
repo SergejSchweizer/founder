@@ -23,7 +23,7 @@ def test_pr_gate_has_simple_checks() -> None:
         ("ruff", "check", "."),
         ("ruff", "format", "--check", "."),
         ("python", "-m", "founder.architecture_checks"),
-        ("mypy", "src", "tests"),
+        ("pyright",),
         ("pytest",),
     )
 
