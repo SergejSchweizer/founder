@@ -15,6 +15,7 @@ from founder.quality import (
     run_quality_gate,
     validate_commit_message_file,
     validate_conventional_commits,
+    validate_squash_subject,
 )
 
 
@@ -117,6 +118,11 @@ def test_validate_commit_message_file(tmp_path: Path) -> None:
     assert validate_commit_message_file(str(message_file)) == 1
 
 
+def test_validate_squash_subject() -> None:
+    assert validate_squash_subject("feat(cli): add command") == 0
+    assert validate_squash_subject("Add command") == 1
+
+
 def test_build_parser_describes_founder_quality_gates() -> None:
     parser = build_parser()
 
@@ -129,6 +135,10 @@ def test_main_validates_commit_message_file(tmp_path: Path) -> None:
     message_file.write_text("feat: add config\n", encoding="utf-8")
 
     assert main(["--commit-msg-file", str(message_file)]) == 0
+
+
+def test_main_validates_squash_subject() -> None:
+    assert main(["--squash-subject", "feat(cli): add command"]) == 0
 
 
 def test_main_requires_layer_without_commit_message_file() -> None:

@@ -130,6 +130,19 @@ def validate_commit_message_file(path: str) -> int:
     return 1
 
 
+def validate_squash_subject(subject: str) -> int:
+    """Validate the PR title used as the squash-merge commit subject."""
+    if is_conventional_commit_subject(subject):
+        return 0
+    print("Squash merge subject validation failed.", file=sys.stderr)
+    print(
+        f"Expected: type(optional-scope): subject, with type one of {CONVENTIONAL_COMMIT_TYPES}.",
+        file=sys.stderr,
+    )
+    print(f"Invalid squash subject: {subject}", file=sys.stderr)
+    return 1
+
+
 def run_quality_gate(layer: str, *, runner: Runner = subprocess.run) -> int:
     """Run the requested quality layer, including Conventional Commit validation."""
     command_result = run_commands(commands_for_layer(layer), runner=runner)
@@ -150,6 +163,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--commit-msg-file",
         help="Validate a single commit message file for the commit-msg hook.",
     )
+    parser.add_argument(
+        "--squash-subject",
+        help="Validate the PR title that will become the squash-merge commit subject.",
+    )
     return parser
 
 
@@ -157,8 +174,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.commit_msg_file:
         return validate_commit_message_file(args.commit_msg_file)
+    if args.squash_subject:
+        return validate_squash_subject(args.squash_subject)
     if not args.layer:
-        build_parser().error("layer is required unless --commit-msg-file is provided")
+        build_parser().error(
+            "layer is required unless --commit-msg-file or --squash-subject is provided"
+        )
     return run_quality_gate(args.layer)
 
 
