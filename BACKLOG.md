@@ -660,7 +660,7 @@ Idempotency: Replanning unchanged pinned inputs yields the same plan and perform
 
 Branch: `feat/refresh-catalog-sync`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/53.
 
 Priority: P0 complete all-ISIN discovery.
 
@@ -678,7 +678,7 @@ Idempotency: Repeating or resuming a catalog run reuses completed raw and normal
 
 Branch: `feat/refresh-all-isin-market-data`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/53.
 
 Priority: P0 catalog-wide data completeness.
 
@@ -696,7 +696,7 @@ Idempotency: Repeating Refresh with unchanged provider data performs no duplicat
 
 Branch: `feat/refresh-cli`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/53.
 
 Priority: P0 operable Refresh module.
 
@@ -714,7 +714,7 @@ Idempotency: Re-running `founder-refresh run` with unchanged data resolves to th
 
 Branch: `feat/selection-cli`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/53.
 
 Priority: P0 operable Selection module.
 
@@ -734,7 +734,7 @@ Idempotency: Repeating `create`, `refresh`, or `use` with unchanged inputs resol
 
 Branch: `feat/update-asset-metric-cache`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/53.
 
 Priority: P0 reusable candidate metrics.
 
@@ -752,7 +752,7 @@ Idempotency: Re-running Update with unchanged candidates and inputs reuses immut
 
 Branch: `feat/update-screening-classifications`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/53.
 
 Priority: P0 metric-based current Selection.
 
@@ -776,7 +776,7 @@ Idempotency: Re-evaluating identical candidates, inputs, benchmark, and profiles
 
 Branch: `feat/update-selection-calendar`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/53.
 
 Priority: P0 comparable portfolio inputs.
 
@@ -794,7 +794,7 @@ Idempotency: Rebuilding an unchanged calendar and comparable metrics reuses immu
 
 Branch: `feat/update-pair-metric-cache`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/53.
 
 Priority: P0 reusable final-member pair metrics.
 
@@ -812,7 +812,7 @@ Idempotency: Re-running overlapping Updates with unchanged final memberships ref
 
 Branch: `feat/update-evaluation-profiles`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/53.
 
 Priority: P0 current-Selection analytical outputs.
 
@@ -830,7 +830,7 @@ Idempotency: Re-running the same final membership and profile resolves to the sa
 
 Branch: `feat/update-cli`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/53.
 
 Priority: P0 operable Update module.
 
@@ -850,7 +850,7 @@ Idempotency: Repeating `founder-update run` with unchanged current Selection and
 
 Branch: `refactor/three-module-cutover`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/53.
 
 Priority: P0 production cutover.
 
