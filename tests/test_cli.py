@@ -5,7 +5,7 @@ import pytest
 
 from founder.cli import main
 from founder.paths import LakePaths
-from founder.table_io import read_json, read_rows, write_rows
+from founder.table_io import read_json, read_rows, write_json, write_rows
 
 
 def _quote(isin: str, exchange: str, code: str, date: str, close: float) -> dict[str, object]:
@@ -105,8 +105,17 @@ def test_cli_runs_univariate_and_bivariate_statistics_modules(
             }
         ],
     )
+    write_json(
+        paths.current_metadata_filter_selection(),
+        {
+            "selection_id": "selected-ie1",
+            "selection_path": str(paths.metadata_filter_isins("selected-ie1")),
+            "manifest_path": str(paths.metadata_filter_manifest("selected-ie1")),
+            "updated_at": "2026-01-01T00:00:00+00:00",
+        },
+    )
 
-    main(["univariate-statistics", "--root", str(root), "--selection-id", "selected-ie1"])
+    main(["univariate-statistics", "--root", str(root)])
     univariate_output = capsys.readouterr()
     univariate_payload = json.loads(univariate_output.out)
     assert univariate_payload["selection_id"] == "selected-ie1"
@@ -234,6 +243,10 @@ def test_cli_runs_metadata_and_univariate_filter_modules(
     metadata_payload = json.loads(metadata_output.out)
     assert metadata_payload["selected_rows"] == 1
     assert len(read_rows(paths.metadata_filter_isins(metadata_payload["selection_id"]))) == 1
+    assert (
+        read_json(paths.current_metadata_filter_selection())["selection_id"]
+        == metadata_payload["selection_id"]
+    )
 
     write_rows(
         paths.gold_univariate_statistics("XETRA", "IE1"),

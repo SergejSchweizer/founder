@@ -47,6 +47,7 @@ def write_metadata_selection(
 ) -> list[JsonRow]:
     """Write a metadata-filter selection and its manifest."""
     selection_rows = [_selection_row(selection_id_value, row) for row in rows]
+    created_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     validate_rows("isin_selection", selection_rows)
     write_rows(paths.metadata_filter_isins(selection_id_value), selection_rows)
     write_json(
@@ -57,7 +58,16 @@ def write_metadata_selection(
             "source_path": source_path,
             "row_count": len(selection_rows),
             "predicates": [predicate.as_text() for predicate in predicates],
-            "created_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
+            "created_at": created_at,
+        },
+    )
+    write_json(
+        paths.current_metadata_filter_selection(),
+        {
+            "selection_id": selection_id_value,
+            "selection_path": str(paths.metadata_filter_isins(selection_id_value)),
+            "manifest_path": str(paths.metadata_filter_manifest(selection_id_value)),
+            "updated_at": created_at,
         },
     )
     return selection_rows

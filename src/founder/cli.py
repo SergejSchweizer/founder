@@ -121,8 +121,7 @@ def build_parser() -> argparse.ArgumentParser:
     univariate.add_argument("--root", default=str(DEFAULT_ROOT), help="Lake root to build from.")
     univariate.add_argument(
         "--selection-id",
-        required=True,
-        help="Metadata-filter selection id to restrict univariate statistics.",
+        help="Metadata-filter selection id. Defaults to the latest metadata-filter selection.",
     )
     univariate.add_argument(
         "--confidence-level",
