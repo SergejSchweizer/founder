@@ -330,6 +330,54 @@ trend_r_squared
 availability_reason
 ```
 
+Univariate feature semantics, ranges, and units:
+
+| Feature | Meaning | Range | Unit |
+| --- | --- | --- | --- |
+| `isin` | Instrument ISIN identifier. | Text. | Identifier |
+| `exchange` | Listing exchange code. | Text. | Identifier |
+| `code` | EODHD listing code/ticker. | Text. | Identifier |
+| `confidence_level` | Tail-risk confidence level used for `var` and `expected_shortfall`. | `0 < x < 1`; default `0.975`. | Ratio |
+| `first_quote_date` | First adjusted-close quote date used. | ISO date or empty only if input is invalid. | Date |
+| `last_quote_date` | Last adjusted-close quote date used. | ISO date or empty only if input is invalid. | Date |
+| `quote_observation_count` | Number of quote rows for the listing. | Integer `>= 1`. | Rows |
+| `first_return_date` | First daily return date after the first quote. | ISO date, or empty when no return exists. | Date |
+| `last_return_date` | Last daily return date. | ISO date, or empty when no return exists. | Date |
+| `return_observation_count` | Number of daily return observations. | Integer `>= 0`. | Rows |
+| `start_adjusted_close` | First adjusted close in the quote window. | Price value; normally `> 0`. | Quote currency |
+| `end_adjusted_close` | Last adjusted close in the quote window. | Price value; normally `> 0`. | Quote currency |
+| `total_return` | Full-period simple return, `end_adjusted_close / start_adjusted_close - 1`. | `[-1, +inf)` for positive start prices; `0` when start price is non-positive. | Return ratio |
+| `cagr` | Compound annual growth rate from `total_return` and elapsed calendar days. | `[-1, +inf)` in normal cases; `0` when elapsed days are invalid. | Return ratio per year |
+| `cumulative_log_return` | Sum of daily log returns. | `(-inf, +inf)`. | Log-return |
+| `mean_log_return` | Arithmetic mean of daily log returns. | `(-inf, +inf)`. | Log-return per trading day |
+| `median_log_return` | Median daily log return. | `(-inf, +inf)`. | Log-return per trading day |
+| `min_log_return` | Worst daily log return. | `(-inf, +inf)`. | Log-return per trading day |
+| `max_log_return` | Best daily log return. | `(-inf, +inf)`. | Log-return per trading day |
+| `mean_simple_return` | Arithmetic mean of daily simple returns. | `[-1, +inf)` for positive prices. | Return ratio per trading day |
+| `median_simple_return` | Median daily simple return. | `[-1, +inf)` for positive prices. | Return ratio per trading day |
+| `min_simple_return` | Worst daily simple return. | `[-1, +inf)` for positive prices. | Return ratio per trading day |
+| `max_simple_return` | Best daily simple return. | `[-1, +inf)` for positive prices. | Return ratio per trading day |
+| `daily_log_return_std` | Sample standard deviation of daily log returns. | `[0, +inf)`. | Log-return per trading day |
+| `daily_simple_return_std` | Sample standard deviation of daily simple returns. | `[0, +inf)`. | Return ratio per trading day |
+| `annualized_return` | Alias of `annualized_log_return`. | `(-inf, +inf)`. | Log-return per year |
+| `annualized_log_return` | Mean daily log return multiplied by `252`. | `(-inf, +inf)`. | Log-return per year |
+| `annualized_simple_return` | Mean daily simple return multiplied by `252`. | `(-inf, +inf)`. | Return ratio per year |
+| `annualized_geometric_return` | `exp(annualized_log_return) - 1`. | `[-1, +inf)`. | Return ratio per year |
+| `annualized_volatility` | Daily log-return standard deviation multiplied by `sqrt(252)`. | `[0, +inf)`. | Log-return volatility per year |
+| `realized_variance` | Sum of squared daily log returns over the observed window. | `[0, +inf)`. | Squared log-return |
+| `realized_volatility` | Square root of `realized_variance`. | `[0, +inf)`. | Log-return |
+| `downside_deviation` | Annualized downside deviation from negative daily log returns. | `[0, +inf)`. | Log-return downside volatility per year |
+| `sharpe_ratio` | `annualized_log_return / annualized_volatility`; risk-free rate is not subtracted. | `(-inf, +inf)`; `0` when denominator is `0`. | Unitless ratio |
+| `sortino_ratio` | `annualized_log_return / downside_deviation`; risk-free rate is not subtracted. | `(-inf, +inf)`; `0` when denominator is `0`. | Unitless ratio |
+| `var` | Historical loss quantile from negative daily log returns at `confidence_level`. | `(-inf, +inf)` technically; positive values are losses, negative values are gains at the quantile. | Daily log-return loss |
+| `expected_shortfall` | Mean historical loss in the tail at or beyond `var`. | `(-inf, +inf)` technically; positive values are tail losses. | Daily log-return loss |
+| `tail_observation_count` | Number of return observations in the tail used for expected shortfall. | Integer `>= 0`. | Rows |
+| `max_drawdown` | Worst peak-to-trough adjusted-close drawdown. | `[-1, 0]` for positive prices. | Return ratio |
+| `positive_day_ratio` | Share of daily log returns greater than `0`. | `[0, 1]`. | Ratio |
+| `log_price_slope` | Linear-regression slope of `ln(adjusted_close)` over quote index. | `(-inf, +inf)`. | Log-price change per quote row |
+| `trend_r_squared` | R-squared of the log-price trend regression. | `[0, 1]` in normal cases. | Unitless ratio |
+| `availability_reason` | Basic availability status for the statistic row. | `ok` or `insufficient_returns`. | Category |
+
 `bivariate_statistics` computes reusable pairwise statistics for a persisted selection. Pair metrics are computed once per unordered ISIN pair and only on the intersection of shared return dates:
 
 ```bash
