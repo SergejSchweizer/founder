@@ -11,6 +11,15 @@ from pathlib import Path
 from typing import Any, cast
 
 from founder.bivariate_statistics import write_bivariate_statistics
+from founder.bronze import (
+    ADDITIONAL_EODHD_DATASETS,
+    QUOTE_DATASET,
+    eodhd_dataset_loader,
+    write_bronze_manifests,
+    write_bronze_plan,
+    write_quotes_to_bronze,
+    write_raw_eodhd_datasets_to_bronze,
+)
 from founder.config import load_eodhd_config
 from founder.fetch_all_isins import fetch_all_isins, write_all_isins
 from founder.http import EodhdClient
@@ -20,11 +29,12 @@ from founder.paths import LakePaths
 from founder.search import (
     approve_universe,
     normalize_name,
+    resolve_current_universe,
     write_canonical_universe,
     write_search_run,
 )
 from founder.selection_filters import parse_predicates
-from founder.silver import read_silver_quotes
+from founder.silver import build_silver_quotes, read_silver_quotes
 from founder.table_io import read_json, read_rows
 from founder.univariate_filter import run_univariate_filter, selection_rows
 from founder.univariate_statistics import (
@@ -113,6 +123,80 @@ def run_fetch_all_isins_workflow(
         "requested_exchange_count": len(fetch_result.requested_exchanges),
         "skipped_exchange_count": len(fetch_result.skipped_exchanges),
         "skipped_exchanges": list(fetch_result.skipped_exchanges),
+    }
+
+
+def run_fetch_all_quotes_workflow(
+    *,
+    root: Path,
+    run_id: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    limit: int | None = None,
+    isin: str | None = None,
+    gap_aware: bool = True,
+    include_raw_datasets: bool = True,
+    concurrency: int = 2,
+) -> dict[str, Any]:
+    """Fetch Bronze quote inputs for the approved universe and rebuild Silver quotes."""
+    paths = LakePaths(root=root)
+    resolved_end_date = end_date or date.today()
+    resolved_run_id = run_id or generated_run_id("fetch-all-quotes", run_date=resolved_end_date)
+    canonical_path = resolve_current_universe(paths)
+    plan = write_bronze_plan(
+        paths,
+        canonical_path,
+        run_id=resolved_run_id,
+        start_date=start_date,
+        end_date=resolved_end_date,
+        limit=limit,
+        isin=isin,
+        gap_aware=gap_aware,
+    )
+    client = EodhdClient(load_eodhd_config())
+    quote_successes, quote_errors = write_quotes_to_bronze(
+        paths,
+        plan,
+        run_date=resolved_end_date,
+        loader=eodhd_dataset_loader(client, QUOTE_DATASET),
+        concurrency=concurrency,
+    )
+    raw_successes: list[dict[str, Any]] = []
+    raw_errors: list[dict[str, Any]] = []
+    if include_raw_datasets:
+        raw_successes, raw_errors = write_raw_eodhd_datasets_to_bronze(
+            paths,
+            plan,
+            run_date=resolved_end_date,
+            loaders={
+                strategy.name: eodhd_dataset_loader(client, strategy)
+                for strategy in ADDITIONAL_EODHD_DATASETS
+            },
+            concurrency=concurrency,
+        )
+    silver_rows = build_silver_quotes(paths, concurrency=concurrency)
+    coverage = write_bronze_manifests(
+        paths,
+        run_id=resolved_run_id,
+        quote_rows=silver_rows,
+        plan=plan,
+        as_of=resolved_end_date,
+    )
+    LOGGER.info(
+        "fetch-all-quotes complete run_id=%s plan_rows=%s quote_successes=%s quote_errors=%s",
+        resolved_run_id,
+        len(plan),
+        len(quote_successes),
+        len(quote_errors),
+    )
+    return {
+        "coverage_rows": len(coverage),
+        "raw_dataset_errors": len(raw_errors),
+        "raw_dataset_successes": len(raw_successes),
+        "quote_errors": len(quote_errors),
+        "quote_successes": len(quote_successes),
+        "run_id": resolved_run_id,
+        "silver_quote_rows": len(silver_rows),
     }
 
 
