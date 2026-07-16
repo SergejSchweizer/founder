@@ -11,7 +11,7 @@ Last reviewed: 2026-07-13
 - [Portfolio Objective](#portfolio-objective)
 - [Portfolio Analysis And Evaluation Plan](#portfolio-analysis-and-evaluation-plan)
 - [Documentation Map](#documentation-map)
-- [Run The Three Modules](#run-the-three-modules)
+- [Five ISIN Module Architecture](#five-isin-module-architecture)
 - [Scheduled Founder Cron](#scheduled-founder-cron)
 - [EODHD Request Safety](#eodhd-request-safety)
 - [Logging And Debugging](#logging-and-debugging)
@@ -160,7 +160,7 @@ Portfolio analysis and evaluation computations include:
 
 The first trusted portfolio candidates should be constrained minimum variance and risk parity, with hierarchical risk parity and maximum diversification as robust alternatives for larger ETF universes. Maximum Sharpe should be treated as a comparison technique until the expected-return model is deliberately chosen and tested out of sample.
 
-The current refactor keeps the public CLI focused on Search plus reusable univariate and bivariate statistics. Portfolio optimization remains downstream analysis work and is not exposed as a first-class module in this cut.
+The current refactor target keeps portfolio optimization downstream from the ISIN data modules. Portfolio optimization remains analysis work and is not exposed as a first-class module in this cut.
 
 ## Documentation Map
 
@@ -171,60 +171,78 @@ The current refactor keeps the public CLI focused on Search plus reusable univar
 - [BACKLOG.md](BACKLOG.md) tracks PR-sized work and implementation status.
 - [AGENTS.md](AGENTS.md) defines agent workflow rules and generated project-history risks.
 
-## Run The Three Modules
+## Five ISIN Module Architecture
 
-Founder currently exposes three CLI modules: `search`, `univariate-statistics`, and `bivariate-statistics`.
+Founder's ISIN architecture target is organized around five deterministic modules:
 
-First run Search with the string to find. By default this reads `docs/eodhd_ucits_etf_matches.csv`, writes to `lake`, generates a search run id, and approves the canonical universe:
-
-```bash
-uv run founder search "UCITS ETF"
+```text
+fetch_all_isins
+  -> metadata_filter
+  -> univariate_statistics
+  -> univariate_filter
+  -> bivariate_statistics
 ```
 
-Then build reusable per-listing statistics from existing Silver quote files:
+`fetch_all_isins` is the only source of the full EODHD ISIN universe. It refreshes an irregularly updated all-ISIN dataset and writes it once for every later module. Target command shape:
+
+```bash
+uv run founder fetch-all-isins
+```
+
+`metadata_filter` reads only the all-ISIN source, applies conjunctive metadata predicates, and writes a hash-addressable selection with `isins.parquet` and `manifest.json`. Target command shape:
+
+```bash
+uv run founder metadata-filter --where type=ETF currency=EUR exchange=XETRA
+```
+
+`univariate_statistics` builds reusable per-ISIN statistics from validated Silver quote files. Returns are daily log returns, `ln(P_t / P_{t-1})`, based on adjusted close:
 
 ```bash
 uv run founder univariate-statistics
 ```
 
-Then build reusable pairwise statistics from the same Silver quote files:
+`univariate_filter` reads the univariate statistics table, applies conjunctive metric predicates, and writes the same referencable selection shape as `metadata_filter`. Target command shape:
 
 ```bash
-uv run founder bivariate-statistics
+uv run founder univariate-filter --where sharpe>0 sortino>0 max_drawdown>-0.3
 ```
 
-Univariate statistics are stored by stable listing key:
+`bivariate_statistics` computes reusable pairwise statistics for a persisted selection. Pair metrics are computed once per unordered ISIN pair and only on the intersection of shared return dates. Target command shape:
+
+```bash
+uv run founder bivariate-statistics --selection-id <selection_id>
+```
+
+Module outputs are intentionally reusable:
 
 ```text
+lake/reference/all_isins/
+lake/silver/metadata_filter/{selection_id}/
 lake/gold/univariate_statistics/{exchange}/{ISIN}.parquet
-```
-
-Bivariate statistics are stored by stable pair key:
-
-```text
+lake/silver/univariate_filter/{selection_id}/
 lake/gold/bivariate_statistics/{left_exchange}/{left_ISIN}/{left_code}/{right_exchange}__{right_ISIN}__{right_code}.parquet
 ```
 
-Those paths deliberately do not include a search run id. A later Search list can therefore reuse already computed statistics for unchanged listings and unchanged listing pairs instead of recomputing them.
+Statistic paths deliberately do not include a selection id. Later metadata or univariate selections can therefore reuse already computed per-ISIN and pair statistics for unchanged listings and unchanged pairs instead of recomputing them.
 
 ## Scheduled Founder Cron
 
-The `vcs` user crontab should call only the three public modules. Keep the cron job readable by defining absolute paths once:
+Founder cron should call the refresh orchestration for the five-module architecture, not individual ad hoc module snippets. Keep the cron job readable by defining absolute paths once:
 
 ```cron
 SHELL=/bin/bash
 FOUNDER_PROJECT=/home/vcs/git/founder
 FOUNDER_UV=/home/vcs/.local/bin/uv
-FOUNDER_LOG=/home/vcs/git/founder/.logs/cron-statistics.log
+FOUNDER_LOCK=/home/vcs/git/founder/lake/silver/runs/founder-refresh.lock
+FOUNDER_LOG=/home/vcs/git/founder/.logs/cron-refresh.log
 
-# Daily statistics rebuild at 18:00 local server time.
-0 18 * * * cd "$FOUNDER_PROJECT" && "$FOUNDER_UV" run founder univariate-statistics --root "$FOUNDER_PROJECT/lake" --debug >> "$FOUNDER_LOG" 2>&1
-5 18 * * * cd "$FOUNDER_PROJECT" && "$FOUNDER_UV" run founder bivariate-statistics --root "$FOUNDER_PROJECT/lake" --debug >> "$FOUNDER_LOG" 2>&1
+# Daily refresh at 18:00 local server time.
+0 18 * * * cd "$FOUNDER_PROJECT" && /usr/bin/flock -n "$FOUNDER_LOCK" "$FOUNDER_UV" run founder refresh --root "$FOUNDER_PROJECT/lake" --concurrency 2 --debug >> "$FOUNDER_LOG" 2>&1
 ```
 
-Inspect it with `crontab -l`. Cron output is appended to `.logs/cron-statistics.log`.
+Inspect it with `crontab -l`. Cron output is appended to `.logs/cron-refresh.log`.
 
-The dry run writes search candidates, a canonical universe, bronze plan, quote rows, coverage manifests, and Gold return/correlation/covariance/feature inputs under the selected local lake root.
+The dry run writes discovery candidates, a canonical universe, bronze plan, quote rows, coverage manifests, and Gold return/correlation/covariance/feature inputs under the selected local lake root.
 
 ## EODHD Request Safety
 
@@ -245,11 +263,13 @@ HTTP `429` responses are retried when retries remain. If EODHD sends `Retry-Afte
 
 Founder writes uniformly formatted logs under `.logs/`. Plain log files are kept for seven days, then zipped; zipped logs older than one month are deleted. `.logs/` is ignored by Git.
 
-All CLI commands support `--debug` for more detailed module logs:
+Target module commands should support `--debug` for more detailed module logs:
 
 ```bash
-uv run founder search "UCITS ETF" --debug
+uv run founder fetch-all-isins --debug
+uv run founder metadata-filter --debug
 uv run founder univariate-statistics --debug
+uv run founder univariate-filter --debug
 uv run founder bivariate-statistics --debug
 ```
 
