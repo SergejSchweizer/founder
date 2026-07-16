@@ -258,6 +258,8 @@ uv run founder univariate-statistics
 
 `univariate_statistics` only runs for the latest persisted `metadata_filter` selection. It does not scan every Silver quote file by default. Use `--selection-id <metadata_filter_selection_id>` only when intentionally rebuilding an older metadata selection.
 
+Univariate Statistics parallelizes per-listing work across all CPU cores visible to the system by default. Use `--concurrency <workers>` to cap worker processes, for example `--concurrency 1` for deterministic single-process debugging.
+
 `univariate_filter` reads the univariate statistics table, applies conjunctive metric predicates, and writes the same referencable selection shape as `metadata_filter`:
 
 ```bash
@@ -401,6 +403,8 @@ Univariate feature semantics, ranges, and units. The empirical column is compute
 ```bash
 uv run founder bivariate-statistics --selection-id <selection_id>
 ```
+
+Bivariate Statistics parallelizes pair work across all CPU cores visible to the system by default. Use `--concurrency <workers>` to cap worker processes.
 
 Module outputs are intentionally reusable:
 

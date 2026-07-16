@@ -155,6 +155,25 @@ def test_univariate_statistics_ignore_empty_and_zero_distribution_events() -> No
     assert row["distribution_observation_count"] == 1
 
 
+def test_univariate_statistics_parallel_matches_serial() -> None:
+    quotes: list[dict[str, object]] = []
+    for isin, exchange, code, base in (
+        ("IE1", "XETRA", "AAA", 100.0),
+        ("IE2", "AS", "BBB", 200.0),
+    ):
+        for index, date in enumerate(("2026-01-01", "2026-01-02", "2026-01-03")):
+            row = _quote(date, base + float(index))
+            row["isin"] = isin
+            row["exchange"] = exchange
+            row["code"] = code
+            quotes.append(row)
+
+    serial = build_univariate_statistics(quotes, concurrency=1)
+    parallel = build_univariate_statistics(quotes, concurrency=2)
+
+    assert parallel == serial
+
+
 def test_univariate_statistics_reject_invalid_confidence_level() -> None:
     with pytest.raises(ValueError, match="confidence_level"):
         build_univariate_statistics([_quote("2026-01-01", 100.0)], confidence_level=1.0)

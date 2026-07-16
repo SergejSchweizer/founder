@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -140,6 +141,7 @@ def run_univariate_statistics_workflow(
     root: Path,
     selection_id: str | None = None,
     confidence_level: float = DEFAULT_CONFIDENCE_LEVEL,
+    concurrency: int | None = None,
 ) -> dict[str, Any]:
     """Build reusable per-listing statistics for one Metadata Filter selection."""
     paths = LakePaths(root=root)
@@ -157,11 +159,14 @@ def run_univariate_statistics_workflow(
         quotes,
         dividend_rows=dividends,
         confidence_level=confidence_level,
+        concurrency=concurrency,
     )
+    workers = _worker_count(concurrency)
     LOGGER.info("univariate statistics complete root=%s rows=%s", root, len(rows))
     return {
         "quote_rows": len(quotes),
         "dividend_rows": len(dividends),
+        "concurrency": workers,
         "selected_listing_count": len(selected_rows),
         "selection_id": resolved_selection_id,
         "univariate_statistics_rows": len(rows),
@@ -186,6 +191,7 @@ def run_bivariate_statistics_workflow(
     *,
     root: Path,
     selection_id: str | None = None,
+    concurrency: int | None = None,
 ) -> dict[str, Any]:
     """Build reusable pairwise statistics from existing Silver quotes."""
     paths = LakePaths(root=root)
@@ -194,10 +200,12 @@ def run_bivariate_statistics_workflow(
     if selection_id is not None:
         quotes = _filter_quotes_to_selection(quotes, selection_rows(paths, selection_id))
     returns = build_quote_returns(quotes)
-    rows = write_bivariate_statistics(paths, returns)
+    rows = write_bivariate_statistics(paths, returns, concurrency=concurrency)
+    workers = _worker_count(concurrency)
     LOGGER.info("bivariate statistics complete root=%s rows=%s", root, len(rows))
     return {
         "bivariate_statistics_rows": len(rows),
+        "concurrency": workers,
         "quote_rows": len(quotes),
         "return_rows": len(returns),
         "selection_id": selection_id or "",
@@ -228,6 +236,12 @@ def _read_bronze_dividends(paths: LakePaths) -> list[dict[str, Any]]:
     for path in sorted((paths.bronze / "dividends").glob("*/*/*.parquet")):
         rows.extend(read_rows(path))
     return rows
+
+
+def _worker_count(concurrency: int | None) -> int:
+    if concurrency is not None:
+        return max(1, concurrency)
+    return max(1, os.cpu_count() or 1)
 
 
 def _current_metadata_selection_id(paths: LakePaths) -> str:

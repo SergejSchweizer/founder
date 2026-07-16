@@ -129,6 +129,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_CONFIDENCE_LEVEL,
         help="Tail-risk confidence level for VaR and expected shortfall.",
     )
+    univariate.add_argument(
+        "--concurrency",
+        type=int,
+        help="Worker process count. Defaults to all CPU cores visible to the system.",
+    )
     univariate_filter = subparsers.add_parser(
         "univariate-filter",
         help="Create an ISIN selection from univariate statistics.",
@@ -166,6 +171,11 @@ def build_parser() -> argparse.ArgumentParser:
     bivariate.add_argument(
         "--selection-id",
         help="Optional metadata-filter or univariate-filter selection id to restrict pair work.",
+    )
+    bivariate.add_argument(
+        "--concurrency",
+        type=int,
+        help="Worker process count. Defaults to all CPU cores visible to the system.",
     )
     return parser
 
@@ -206,6 +216,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             root=Path(args.root),
             selection_id=args.selection_id,
             confidence_level=args.confidence_level,
+            concurrency=args.concurrency,
         )
     elif args.command == "univariate-filter":
         summary = run_univariate_filter_workflow(
@@ -217,6 +228,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         summary = run_bivariate_statistics_workflow(
             root=Path(args.root),
             selection_id=args.selection_id,
+            concurrency=args.concurrency,
         )
     else:
         print("founder")
