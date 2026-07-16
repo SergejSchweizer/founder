@@ -243,10 +243,10 @@ fetched_at
 `univariate_statistics` builds reusable per-ISIN statistics from validated Silver quote files. Returns are daily log returns, `ln(P_t / P_{t-1})`, based on adjusted close:
 
 ```bash
-uv run founder univariate-statistics --selection-id <metadata_filter_selection_id>
+uv run founder univariate-statistics
 ```
 
-`univariate_statistics` only runs for a persisted `metadata_filter` selection. It does not scan every Silver quote file by default.
+`univariate_statistics` only runs for the latest persisted `metadata_filter` selection. It does not scan every Silver quote file by default. Use `--selection-id <metadata_filter_selection_id>` only when intentionally rebuilding an older metadata selection.
 
 `univariate_filter` reads the univariate statistics table, applies conjunctive metric predicates, and writes the same referencable selection shape as `metadata_filter`:
 
@@ -322,7 +322,7 @@ Target module commands should support `--debug` for more detailed module logs:
 ```bash
 uv run founder fetch-all-isins --debug
 uv run founder metadata-filter --debug
-uv run founder univariate-statistics --selection-id <metadata_filter_selection_id> --debug
+uv run founder univariate-statistics --debug
 uv run founder univariate-filter --debug
 uv run founder bivariate-statistics --debug
 ```

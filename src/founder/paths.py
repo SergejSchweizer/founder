@@ -49,6 +49,9 @@ class LakePaths:
     def metadata_filter_manifest(self, selection_id: str) -> Path:
         return self.metadata_filter_run(selection_id) / "manifest.json"
 
+    def current_metadata_filter_selection(self) -> Path:
+        return self.silver / "metadata_filter" / "current_selection.json"
+
     def univariate_filter_run(self, selection_id: str) -> Path:
         return self.silver / "univariate_filter" / f"selection_id={selection_id}"
 
