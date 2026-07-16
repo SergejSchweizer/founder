@@ -22,7 +22,9 @@ def _parse_date(value: str) -> date:
 def build_parser() -> argparse.ArgumentParser:
     """Build the standalone fetch-all-quotes argument parser."""
     parser = argparse.ArgumentParser(
-        description="Fetch quote, dividend, and split data for the approved universe."
+        description=(
+            "Fetch quote, dividend, and split data for the latest metadata-filter selection."
+        )
     )
     parser.add_argument("--debug", action="store_true", help="Write verbose DEBUG logs.")
     parser.add_argument("--root", default=str(DEFAULT_ROOT), help="Lake root to write to.")
@@ -41,7 +43,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional last quote date YYYY-MM-DD. Defaults to today.",
     )
     parser.add_argument("--limit", type=int, help="Optional maximum approved listings to fetch.")
-    parser.add_argument("--isin", help="Optional single ISIN from the approved universe to fetch.")
+    parser.add_argument(
+        "--isin", help="Optional single ISIN from the latest metadata-filter selection to fetch."
+    )
     parser.add_argument(
         "--no-gap-aware",
         action="store_true",

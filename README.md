@@ -111,7 +111,7 @@ Top canonical exchanges after one-row-per-ISIN selection:
 
 1. Discover ETF and fund instruments from EODHD without committing credentials.
 2. Deduplicate the universe to one canonical listing per ISIN, preferring `XETRA` when available.
-3. Fetch Bronze end-of-day quotes for the selected canonical universe with `fetch-all-quotes`.
+3. Fetch Bronze end-of-day quotes for the latest `metadata_filter` selection with `fetch-all-quotes`.
 4. Build Silver quotes into a reproducible local dataset.
 5. Validate coverage, missing dates, currencies, identifiers, and duplicate listings.
 6. Estimate return and risk inputs from validated quote history.
@@ -186,7 +186,7 @@ fetch_all_isins
 uv run founder fetch-all-isins
 ```
 
-`fetch-all-quotes` is the quote refresh module. It reads the approved canonical universe, fetches EODHD quotes plus companion dividends and splits by default, writes Bronze inputs, rebuilds Silver quotes, and updates coverage manifests:
+`fetch-all-quotes` is the quote refresh module. It reads the latest persisted `metadata_filter` selection, fetches EODHD quotes plus companion dividends and splits by default, writes Bronze inputs, rebuilds Silver quotes, and updates coverage manifests:
 
 ```bash
 uv run founder fetch-all-quotes
@@ -214,7 +214,7 @@ Available `fetch-all-quotes` options:
   Optional maximum approved listings to fetch.
 
 --isin <ISIN>
-  Fetch only one ISIN from the approved canonical universe.
+  Fetch only one ISIN from the latest metadata-filter selection.
 
 --no-gap-aware
   Disable Silver-based gap planning and request the whole requested date window.

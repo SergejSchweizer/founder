@@ -14,9 +14,9 @@ from founder.bivariate_statistics import write_bivariate_statistics
 from founder.bronze import (
     ADDITIONAL_EODHD_DATASETS,
     QUOTE_DATASET,
+    build_gap_bronze_plan,
     eodhd_dataset_loader,
     write_bronze_manifests,
-    write_bronze_plan,
     write_quotes_to_bronze,
     write_raw_eodhd_datasets_to_bronze,
 )
@@ -29,13 +29,12 @@ from founder.paths import LakePaths
 from founder.search import (
     approve_universe,
     normalize_name,
-    resolve_current_universe,
     write_canonical_universe,
     write_search_run,
 )
 from founder.selection_filters import parse_predicates
 from founder.silver import build_silver_quotes, read_silver_quotes
-from founder.table_io import read_json, read_rows
+from founder.table_io import read_json, read_rows, write_rows
 from founder.univariate_filter import run_univariate_filter, selection_rows
 from founder.univariate_statistics import (
     DEFAULT_CONFIDENCE_LEVEL,
@@ -138,21 +137,30 @@ def run_fetch_all_quotes_workflow(
     include_raw_datasets: bool = True,
     concurrency: int = 2,
 ) -> dict[str, Any]:
-    """Fetch Bronze quote inputs for the approved universe and rebuild Silver quotes."""
+    """Fetch Bronze quote inputs for the latest Metadata Filter selection."""
     paths = LakePaths(root=root)
     resolved_end_date = end_date or date.today()
     resolved_run_id = run_id or generated_run_id("fetch-all-quotes", run_date=resolved_end_date)
-    canonical_path = resolve_current_universe(paths)
-    plan = write_bronze_plan(
-        paths,
-        canonical_path,
+    selection_id = _latest_metadata_selection_id(paths)
+    selection_rows = _metadata_selection_rows(paths, selection_id)
+    if isin is not None:
+        normalized_isin = isin.casefold()
+        selection_rows = [
+            row for row in selection_rows if str(row.get("isin", "")).casefold() == normalized_isin
+        ]
+        if not selection_rows:
+            raise ValueError(f"metadata-filter selection does not contain ISIN: {isin}")
+    if limit is not None:
+        selection_rows = selection_rows[:limit]
+    plan = _build_fetch_all_quotes_plan(
+        selection_rows,
         run_id=resolved_run_id,
         start_date=start_date,
         end_date=resolved_end_date,
-        limit=limit,
-        isin=isin,
-        gap_aware=gap_aware,
     )
+    if gap_aware:
+        plan = build_gap_bronze_plan(plan, read_silver_quotes(paths), end_date=resolved_end_date)
+    write_rows(paths.bronze_plan(resolved_run_id), plan)
     client = EodhdClient(load_eodhd_config())
     quote_successes, quote_errors = write_quotes_to_bronze(
         paths,
@@ -196,8 +204,35 @@ def run_fetch_all_quotes_workflow(
         "quote_errors": len(quote_errors),
         "quote_successes": len(quote_successes),
         "run_id": resolved_run_id,
+        "selection_id": selection_id,
+        "selected_listing_count": len(selection_rows),
         "silver_quote_rows": len(silver_rows),
     }
+
+
+def _build_fetch_all_quotes_plan(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    run_id: str,
+    start_date: date | None,
+    end_date: date | None,
+) -> list[dict[str, Any]]:
+    plan: list[dict[str, Any]] = []
+    for row in rows:
+        code = str(row["code"])
+        exchange = str(row["exchange"])
+        plan.append(
+            {
+                "run_id": run_id,
+                "isin": str(row["isin"]),
+                "code": code,
+                "exchange": exchange,
+                "symbol": f"{code}.{exchange}",
+                "start_date": start_date.isoformat() if start_date is not None else "",
+                "end_date": end_date.isoformat() if end_date is not None else "",
+            }
+        )
+    return plan
 
 
 def run_metadata_filter_workflow(

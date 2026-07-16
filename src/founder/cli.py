@@ -83,7 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     fetch_all_quotes = subparsers.add_parser(
         "fetch-all-quotes",
-        help="Fetch quote, dividend, and split data for the approved universe.",
+        help="Fetch quote, dividend, and split data for the latest metadata-filter selection.",
     )
     fetch_all_quotes.add_argument(
         "--debug",
@@ -115,7 +115,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     fetch_all_quotes.add_argument(
         "--isin",
-        help="Optional single ISIN from the approved universe to fetch.",
+        help="Optional single ISIN from the latest metadata-filter selection to fetch.",
     )
     fetch_all_quotes.add_argument(
         "--no-gap-aware",

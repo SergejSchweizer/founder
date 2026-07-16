@@ -176,29 +176,43 @@ def test_fetch_all_quotes_workflow_writes_bronze_and_silver(
     root = tmp_path / "lake"
     paths = LakePaths(root=root)
     write_rows(
-        paths.canonical_universe("search-quotes"),
+        paths.metadata_filter_isins("older-selection"),
         [
             {
-                "search_run_id": "search-quotes",
-                "isin": "IE0000000001",
-                "code": "AAA",
+                "selection_id": "older-selection",
+                "isin": "IE0000000000",
+                "code": "OLD",
                 "exchange": "XETRA",
-                "instrument_type": "ETF",
-                "country": "DE",
-                "currency": "EUR",
-                "name": "Example UCITS ETF",
-                "normalized_name": "example ucits etf",
-                "selection_reason": "preferred_xetra",
-                "selected_for_bronze": True,
+                "name": "Older ETF",
+                "source_module": "metadata_filter",
             }
         ],
     )
     write_json(
-        paths.current_universe(),
+        paths.metadata_filter_manifest("older-selection"),
         {
-            "search_run_id": "search-quotes",
-            "canonical_universe_path": str(paths.canonical_universe("search-quotes")),
-            "approved_at": "2026-01-01T00:00:00+00:00",
+            "selection_id": "older-selection",
+            "created_at": "2026-01-01T00:00:00+00:00",
+        },
+    )
+    write_rows(
+        paths.metadata_filter_isins("latest-selection"),
+        [
+            {
+                "selection_id": "latest-selection",
+                "isin": "IE0000000001",
+                "code": "AAA",
+                "exchange": "XETRA",
+                "name": "Example UCITS ETF",
+                "source_module": "metadata_filter",
+            }
+        ],
+    )
+    write_json(
+        paths.metadata_filter_manifest("latest-selection"),
+        {
+            "selection_id": "latest-selection",
+            "created_at": "2026-01-02T00:00:00+00:00",
         },
     )
 
@@ -246,6 +260,8 @@ def test_fetch_all_quotes_workflow_writes_bronze_and_silver(
 
     assert summary["quote_successes"] == 1
     assert summary["raw_dataset_successes"] == 2
+    assert summary["selection_id"] == "latest-selection"
+    assert summary["selected_listing_count"] == 1
     assert summary["silver_quote_rows"] == 2
     assert len(read_rows(paths.bronze_quote_file("XETRA", 2026, "IE0000000001"))) == 2
     assert (
