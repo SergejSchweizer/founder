@@ -214,6 +214,16 @@ Available `metadata-filter` options:
 
 At least one `--where` or `--name-contains` option is required. All filters are conjunctive.
 
+`metadata-filter` CLI filter reference:
+
+| CLI filter | Repeatable | Applies to | Semantics | Example |
+| --- | --- | --- | --- | --- |
+| `--where <field><operator><value>` | Yes | Any `all_isins` metadata field listed below. | Adds one predicate; all predicates must match. Text comparisons are exact except `~`; numeric operators parse both sides as numbers. | `--where instrument_type=ETF` |
+| `--name-contains <text>` | Yes | `name` | Case-insensitive substring search. Repeating it requires every fragment to occur in the name. Equivalent to adding `name~<text>` predicates. | `--name-contains "UCITS ETF"` |
+| `--selection-name <name>` | No | Selection id only | Stable human-readable prefix for the generated selection id. It does not change membership. | `--selection-name ucits-etf` |
+| `--root <path>` | No | Lake location | Reads `reference/all_isins/all_isins.parquet` below this root and writes the selection below `silver/metadata_filter/`. | `--root lake` |
+| `--debug` | No | Logging | Enables verbose DEBUG logs for the command. | `--debug` |
+
 Supported predicate operators:
 
 ```text
@@ -228,17 +238,17 @@ field<=value     numeric less-than-or-equal
 
 Filterable metadata fields are the `all_isins` columns:
 
-```text
-isin
-exchange
-code
-name
-instrument_type
-country
-currency
-source_exchange
-fetched_at
-```
+| Field | Type | Typical use with `metadata-filter` |
+| --- | --- | --- |
+| `isin` | Text | Select one ISIN or exclude a known ISIN: `--where isin=IE0000000001`. |
+| `exchange` | Text | Restrict to one listing exchange: `--where exchange=XETRA`. |
+| `code` | Text | Restrict to one exchange-local symbol/code: `--where code=SXR8`. |
+| `name` | Text | Filter by fund or instrument name; prefer `--name-contains` or `--where name~UCITS`. |
+| `instrument_type` | Text | Restrict instrument class, for example `--where instrument_type=ETF`. |
+| `country` | Text | Restrict country metadata when EODHD provides it: `--where country=DE`. |
+| `currency` | Text | Restrict listing currency: `--where currency=EUR`. |
+| `source_exchange` | Text | Restrict the EODHD exchange list that produced the row: `--where source_exchange=XETRA`. |
+| `fetched_at` | ISO timestamp text | Audit or advanced snapshot filtering. Text operators work; numeric operators are not appropriate. |
 
 `univariate_statistics` builds reusable per-ISIN statistics from validated Silver quote files. Returns are daily log returns, `ln(P_t / P_{t-1})`, based on adjusted close:
 

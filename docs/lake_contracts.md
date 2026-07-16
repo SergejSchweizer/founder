@@ -122,4 +122,16 @@ uv run founder univariate-statistics --root lake
 uv run founder bivariate-statistics --root lake
 ```
 
+`metadata-filter` reads only `lake/reference/all_isins/all_isins.parquet`. At least one `--where` or `--name-contains` filter is required, and repeated filters are conjunctive:
+
+| CLI filter | Repeatable | Applies to | Contract |
+| --- | --- | --- | --- |
+| `--where <field><operator><value>` | Yes | `isin`, `exchange`, `code`, `name`, `instrument_type`, `country`, `currency`, `source_exchange`, `fetched_at` | Uses the persisted `all_isins` column values without fetching or computing metrics. |
+| `--name-contains <text>` | Yes | `name` | Case-insensitive substring search; equivalent to requiring the name to contain every provided fragment. |
+| `--selection-name <name>` | No | Selection id | Changes the readable selection-id prefix only; membership is still determined by the filters. |
+| `--root <path>` | No | Lake root | Reads reference metadata and writes `silver/metadata_filter/{selection_id}/isins.parquet` plus `manifest.json`. |
+| `--debug` | No | Logs | Enables verbose command logging. |
+
+Supported `--where` operators are `=`, `!=`, `~`, `>`, `>=`, `<`, and `<=`. The `~` operator is a case-insensitive substring match. Numeric operators parse both sides as numbers and should only be used for numeric-like metadata values.
+
 Statistics outputs use stable listing and pair paths so later metadata selections can reuse unchanged calculations.

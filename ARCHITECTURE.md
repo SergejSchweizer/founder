@@ -93,7 +93,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 
 `founder.fetch_all_isins` owns full EODHD metadata reference refreshes. It enumerates exchange symbol lists, keeps ISIN-bearing listing metadata, and writes the single reusable all-ISIN source under `lake/reference/all_isins/`.
 
-`founder.metadata_filter` owns metadata-only selections. It reads the all-ISIN reference, applies conjunctive predicates, and writes hash-addressable `isins.parquet` and `manifest.json` selection artifacts.
+`founder.metadata_filter` owns metadata-only selections. It reads the all-ISIN reference, applies conjunctive predicates, and writes hash-addressable `isins.parquet` and `manifest.json` selection artifacts. Its public CLI filters are `--where`, `--name-contains`, `--selection-name`, `--root`, and `--debug`; `--where` predicates may use `=`, `!=`, `~`, `>`, `>=`, `<`, and `<=` against the `all_isins` fields `isin`, `exchange`, `code`, `name`, `instrument_type`, `country`, `currency`, `source_exchange`, and `fetched_at`.
 
 `founder.univariate_statistics` owns reusable per-listing statistics from validated quote history.
 
