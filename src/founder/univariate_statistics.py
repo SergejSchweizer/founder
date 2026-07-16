@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
+from concurrent.futures import ProcessPoolExecutor
 from datetime import date
 from math import exp, log, sqrt
 from typing import Any
@@ -53,6 +55,7 @@ def build_univariate_statistics(
     *,
     dividend_rows: Sequence[Mapping[str, Any]] = (),
     confidence_level: float = DEFAULT_CONFIDENCE_LEVEL,
+    concurrency: int | None = None,
 ) -> list[JsonRow]:
     """Compute only one-ISIN/listing statistics from quote rows.
 
@@ -69,96 +72,20 @@ def build_univariate_statistics(
         key = (str(row["isin"]), str(row["exchange"]), str(row["code"]))
         quotes_by_listing.setdefault(key, []).append(row)
 
-    returns_by_listing: dict[tuple[str, str, str], list[Mapping[str, Any]]] = {}
-    for row in build_quote_returns(quote_rows):
-        key = (str(row["isin"]), str(row["exchange"]), str(row["code"]))
-        returns_by_listing.setdefault(key, []).append(row)
-
-    statistics: list[JsonRow] = []
-    for (isin, exchange, code), quotes in sorted(quotes_by_listing.items()):
-        ordered_quotes = sorted(quotes, key=lambda row: str(row["date"]))
-        ordered_returns = sorted(
-            returns_by_listing.get((isin, exchange, code), []),
-            key=lambda row: str(row["date"]),
+    tasks = [
+        (
+            key,
+            tuple(dict(row) for row in quotes),
+            distributions_by_listing.get(key, ()),
+            confidence_level,
         )
-        returns = [float(row["return"]) for row in ordered_returns]
-        simple_returns = [float(row["simple_return"]) for row in ordered_returns]
-        adjusted_closes = [float(row["adjusted_close"]) for row in ordered_quotes]
-        first_close = adjusted_closes[0]
-        last_close = adjusted_closes[-1]
-        first_quote_date = str(ordered_quotes[0]["date"])
-        last_quote_date = str(ordered_quotes[-1]["date"])
-        total_return = 0.0 if first_close <= 0 else (last_close / first_close) - 1.0
-        cumulative_log_return = sum(returns)
-        mean_log_return = _mean(returns)
-        mean_simple_return = _mean(simple_returns)
-        annualized_log_return = mean_log_return * ANNUAL_TRADING_DAYS
-        annualized_simple_return = mean_simple_return * ANNUAL_TRADING_DAYS
-        annualized_geometric_return = (
-            0.0 if not returns else _exponential_return(mean_log_return * ANNUAL_TRADING_DAYS)
-        )
-        annualized_volatility = _annualized_volatility(returns)
-        downside_deviation = _downside_deviation(returns)
-        tail_risk = _tail_risk(returns, confidence_level)
-        log_price_trend = _log_price_trend(adjusted_closes)
-        distribution = _distribution_features(
-            distributions_by_listing.get((isin, exchange, code), ())
-        )
-        statistics.append(
-            {
-                "isin": isin,
-                "exchange": exchange,
-                "code": code,
-                "confidence_level": confidence_level,
-                "first_quote_date": first_quote_date,
-                "last_quote_date": last_quote_date,
-                "quote_observation_count": len(ordered_quotes),
-                "first_return_date": str(ordered_returns[0]["date"]) if ordered_returns else "",
-                "last_return_date": str(ordered_returns[-1]["date"]) if ordered_returns else "",
-                "return_observation_count": len(returns),
-                "start_adjusted_close": first_close,
-                "end_adjusted_close": last_close,
-                "total_return": total_return,
-                "cagr": _cagr(total_return, first_quote_date, last_quote_date),
-                "cumulative_log_return": cumulative_log_return,
-                "mean_log_return": mean_log_return,
-                "median_log_return": _median(returns),
-                "min_log_return": min(returns) if returns else 0.0,
-                "max_log_return": max(returns) if returns else 0.0,
-                "mean_simple_return": mean_simple_return,
-                "median_simple_return": _median(simple_returns),
-                "min_simple_return": min(simple_returns) if simple_returns else 0.0,
-                "max_simple_return": max(simple_returns) if simple_returns else 0.0,
-                "daily_log_return_std": sqrt(_sample_variance(returns)),
-                "daily_simple_return_std": sqrt(_sample_variance(simple_returns)),
-                "annualized_return": annualized_log_return,
-                "annualized_log_return": annualized_log_return,
-                "annualized_simple_return": annualized_simple_return,
-                "annualized_geometric_return": annualized_geometric_return,
-                "annualized_volatility": annualized_volatility,
-                "realized_variance": sum(value * value for value in returns),
-                "realized_volatility": sqrt(sum(value * value for value in returns)),
-                "downside_deviation": downside_deviation,
-                "sharpe_ratio": _ratio(annualized_log_return, annualized_volatility),
-                "sortino_ratio": _ratio(
-                    annualized_log_return,
-                    downside_deviation,
-                ),
-                "var": tail_risk[0],
-                "expected_shortfall": tail_risk[1],
-                "tail_observation_count": tail_risk[2],
-                "max_drawdown": _max_drawdown(adjusted_closes),
-                "positive_day_ratio": _positive_day_ratio(returns),
-                "log_price_slope": log_price_trend[0],
-                "trend_r_squared": log_price_trend[1],
-                "availability_reason": "ok" if len(returns) >= 2 else "insufficient_returns",
-                "distribution_frequency": distribution["distribution_frequency"],
-                "distribution_events_per_year": distribution["distribution_events_per_year"],
-                "last_distribution_date": distribution["last_distribution_date"],
-                "distribution_observation_count": distribution["distribution_observation_count"],
-            }
-        )
-    return statistics
+        for key, quotes in sorted(quotes_by_listing.items())
+    ]
+    workers = _worker_count(concurrency)
+    if workers == 1 or len(tasks) <= 1:
+        return [_build_univariate_listing_statistics(task) for task in tasks]
+    with ProcessPoolExecutor(max_workers=workers) as executor:
+        return list(executor.map(_build_univariate_listing_statistics, tasks))
 
 
 def write_univariate_statistics(
@@ -167,17 +94,111 @@ def write_univariate_statistics(
     *,
     dividend_rows: Sequence[Mapping[str, Any]] = (),
     confidence_level: float = DEFAULT_CONFIDENCE_LEVEL,
+    concurrency: int | None = None,
 ) -> list[JsonRow]:
     """Write Univariate Statistics rows to Gold paths by listing."""
     rows = build_univariate_statistics(
         quote_rows,
         dividend_rows=dividend_rows,
         confidence_level=confidence_level,
+        concurrency=concurrency,
     )
     validate_rows("univariate_statistics", rows)
     for row in rows:
         write_rows(paths.gold_univariate_statistics(str(row["exchange"]), str(row["isin"])), [row])
     return rows
+
+
+def _worker_count(concurrency: int | None) -> int:
+    if concurrency is not None:
+        return max(1, concurrency)
+    return max(1, os.cpu_count() or 1)
+
+
+def _build_univariate_listing_statistics(
+    task: tuple[
+        tuple[str, str, str],
+        tuple[Mapping[str, Any], ...],
+        Sequence[date],
+        float,
+    ],
+) -> JsonRow:
+    (isin, exchange, code), quotes, distribution_dates, confidence_level = task
+    ordered_quotes = sorted(quotes, key=lambda row: str(row["date"]))
+    ordered_returns = build_quote_returns(ordered_quotes)
+    returns = [float(row["return"]) for row in ordered_returns]
+    simple_returns = [float(row["simple_return"]) for row in ordered_returns]
+    adjusted_closes = [float(row["adjusted_close"]) for row in ordered_quotes]
+    first_close = adjusted_closes[0]
+    last_close = adjusted_closes[-1]
+    first_quote_date = str(ordered_quotes[0]["date"])
+    last_quote_date = str(ordered_quotes[-1]["date"])
+    total_return = 0.0 if first_close <= 0 else (last_close / first_close) - 1.0
+    cumulative_log_return = sum(returns)
+    mean_log_return = _mean(returns)
+    mean_simple_return = _mean(simple_returns)
+    annualized_log_return = mean_log_return * ANNUAL_TRADING_DAYS
+    annualized_simple_return = mean_simple_return * ANNUAL_TRADING_DAYS
+    annualized_geometric_return = (
+        0.0 if not returns else _exponential_return(mean_log_return * ANNUAL_TRADING_DAYS)
+    )
+    annualized_volatility = _annualized_volatility(returns)
+    downside_deviation = _downside_deviation(returns)
+    tail_risk = _tail_risk(returns, confidence_level)
+    log_price_trend = _log_price_trend(adjusted_closes)
+    distribution = _distribution_features(distribution_dates)
+    return {
+        "isin": isin,
+        "exchange": exchange,
+        "code": code,
+        "confidence_level": confidence_level,
+        "first_quote_date": first_quote_date,
+        "last_quote_date": last_quote_date,
+        "quote_observation_count": len(ordered_quotes),
+        "first_return_date": str(ordered_returns[0]["date"]) if ordered_returns else "",
+        "last_return_date": str(ordered_returns[-1]["date"]) if ordered_returns else "",
+        "return_observation_count": len(returns),
+        "start_adjusted_close": first_close,
+        "end_adjusted_close": last_close,
+        "total_return": total_return,
+        "cagr": _cagr(total_return, first_quote_date, last_quote_date),
+        "cumulative_log_return": cumulative_log_return,
+        "mean_log_return": mean_log_return,
+        "median_log_return": _median(returns),
+        "min_log_return": min(returns) if returns else 0.0,
+        "max_log_return": max(returns) if returns else 0.0,
+        "mean_simple_return": mean_simple_return,
+        "median_simple_return": _median(simple_returns),
+        "min_simple_return": min(simple_returns) if simple_returns else 0.0,
+        "max_simple_return": max(simple_returns) if simple_returns else 0.0,
+        "daily_log_return_std": sqrt(_sample_variance(returns)),
+        "daily_simple_return_std": sqrt(_sample_variance(simple_returns)),
+        "annualized_return": annualized_log_return,
+        "annualized_log_return": annualized_log_return,
+        "annualized_simple_return": annualized_simple_return,
+        "annualized_geometric_return": annualized_geometric_return,
+        "annualized_volatility": annualized_volatility,
+        "realized_variance": sum(value * value for value in returns),
+        "realized_volatility": sqrt(sum(value * value for value in returns)),
+        "downside_deviation": downside_deviation,
+        "sharpe_ratio": _ratio(annualized_log_return, annualized_volatility),
+        "sortino_ratio": _ratio(
+            annualized_log_return,
+            downside_deviation,
+        ),
+        "var": tail_risk[0],
+        "expected_shortfall": tail_risk[1],
+        "tail_observation_count": tail_risk[2],
+        "max_drawdown": _max_drawdown(adjusted_closes),
+        "positive_day_ratio": _positive_day_ratio(returns),
+        "log_price_slope": log_price_trend[0],
+        "trend_r_squared": log_price_trend[1],
+        "availability_reason": "ok" if len(returns) >= 2 else "insufficient_returns",
+        "distribution_frequency": distribution["distribution_frequency"],
+        "distribution_events_per_year": distribution["distribution_events_per_year"],
+        "last_distribution_date": distribution["last_distribution_date"],
+        "distribution_observation_count": distribution["distribution_observation_count"],
+    }
 
 
 def _mean(values: Sequence[float]) -> float:

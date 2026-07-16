@@ -63,3 +63,22 @@ def test_bivariate_statistics_skip_same_isin_pairs_by_default() -> None:
 
     assert build_bivariate_statistics(returns) == []
     assert len(build_bivariate_statistics(returns, skip_same_isin=False)) == 1
+
+
+def test_bivariate_statistics_parallel_matches_serial() -> None:
+    returns = [
+        _return("IE1", "XETRA", "AAA", "2026-01-01", 0.01),
+        _return("IE1", "XETRA", "AAA", "2026-01-02", 0.02),
+        _return("IE1", "XETRA", "AAA", "2026-01-03", 0.03),
+        _return("IE2", "AS", "BBB", "2026-01-01", 0.03),
+        _return("IE2", "AS", "BBB", "2026-01-02", 0.02),
+        _return("IE2", "AS", "BBB", "2026-01-03", 0.01),
+        _return("IE3", "PA", "CCC", "2026-01-01", 0.02),
+        _return("IE3", "PA", "CCC", "2026-01-02", 0.03),
+        _return("IE3", "PA", "CCC", "2026-01-03", 0.04),
+    ]
+
+    serial = build_bivariate_statistics(returns, concurrency=1)
+    parallel = build_bivariate_statistics(returns, concurrency=2)
+
+    assert parallel == serial
