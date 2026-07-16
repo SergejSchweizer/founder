@@ -328,6 +328,10 @@ positive_day_ratio
 log_price_slope
 trend_r_squared
 availability_reason
+distribution_frequency
+distribution_events_per_year
+last_distribution_date
+distribution_observation_count
 ```
 
 Univariate feature semantics, ranges, and units. The empirical column is computed from the current local `lake/gold/univariate_statistics` snapshot with 1,759 rows. It is a descriptive `mean +/- 3 std` band and is not clipped to the valid technical range:
@@ -377,6 +381,10 @@ Univariate feature semantics, ranges, and units. The empirical column is compute
 | `log_price_slope` | Linear-regression slope of `ln(adjusted_close)` over quote index. | `(-inf, +inf)`. | Log-price change per quote row | `0.000253 [-0.001997, 0.002502]` |
 | `trend_r_squared` | R-squared of the log-price trend regression. | `[0, 1]` in normal cases. | Unitless ratio | `0.642729 [-0.291661, 1.5771]` |
 | `availability_reason` | Basic availability status for the statistic row. | `ok` or `insufficient_returns`. | Category | n/a |
+| `distribution_frequency` | Inferred dividend distribution cadence from Bronze dividend dates. | `monthly`, `quarterly`, `semiannual`, `annual`, `irregular`, `accumulating`, or `unknown`. | Category | `accumulating=1104`, `irregular=349`, `quarterly=94`, `semiannual=91`, `annual=77`, `unknown=24`, `monthly=20` |
+| `distribution_events_per_year` | Annualized event rate from first to last positive dividend event. | `[0, +inf)`. | Events per year | `1.0295 [-4.8443, 6.9032]` |
+| `last_distribution_date` | Latest positive dividend event date. | ISO date, or empty when no dividend event exists. | Date | n/a |
+| `distribution_observation_count` | Number of positive dividend events used for distribution inference. | Integer `>= 0`. | Rows | `8.7322 [-43.8037, 61.2681]` |
 
 `bivariate_statistics` computes reusable pairwise statistics for a persisted selection. Pair metrics are computed once per unordered ISIN pair and only on the intersection of shared return dates:
 

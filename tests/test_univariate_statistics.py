@@ -29,6 +29,21 @@ def _quote(date: str, adjusted_close: float) -> dict[str, object]:
     }
 
 
+def _dividend(date: str, value: float = 1.0) -> dict[str, object]:
+    return {
+        "run_id": "bronze-1",
+        "isin": "IE1",
+        "code": "AAA",
+        "exchange": "XETRA",
+        "date": date,
+        "value": value,
+        "unadjustedValue": value,
+        "currency": "EUR",
+        "symbol": "AAA.XETRA",
+        "run_date": "2026-01-04",
+    }
+
+
 def test_univariate_statistics_are_univariate_and_reference_one_listing(tmp_path: Path) -> None:
     paths = LakePaths(root=tmp_path / "lake")
     quotes = [
@@ -62,8 +77,82 @@ def test_univariate_statistics_are_univariate_and_reference_one_listing(tmp_path
     assert row["expected_shortfall"] >= row["var"]
     assert row["trend_r_squared"] >= 0.0
     assert row["availability_reason"] == "ok"
+    assert row["distribution_frequency"] == "accumulating"
+    assert row["distribution_events_per_year"] == 0.0
+    assert row["last_distribution_date"] == ""
+    assert row["distribution_observation_count"] == 0
     assert written == statistics
     assert read_rows(paths.gold_univariate_statistics("XETRA", "IE1")) == statistics
+
+
+def test_univariate_statistics_detect_monthly_distribution_frequency() -> None:
+    quotes = [
+        _quote("2026-01-01", 100.0),
+        _quote("2026-02-01", 101.0),
+        _quote("2026-03-01", 102.0),
+    ]
+    dividends = [
+        _dividend("2026-01-15"),
+        _dividend("2026-02-15"),
+        _dividend("2026-03-15"),
+        _dividend("2026-04-15"),
+    ]
+
+    row = build_univariate_statistics(quotes, dividend_rows=dividends)[0]
+
+    assert row["distribution_frequency"] == "monthly"
+    assert row["distribution_events_per_year"] == pytest.approx(12.171, rel=0.001)
+    assert row["last_distribution_date"] == "2026-04-15"
+    assert row["distribution_observation_count"] == 4
+
+
+@pytest.mark.parametrize(
+    ("dividend_dates", "expected_frequency"),
+    [
+        (["2026-01-15"], "unknown"),
+        (["2026-01-15", "2026-04-15", "2026-07-15"], "quarterly"),
+        (["2026-01-15", "2026-07-15", "2027-01-15"], "semiannual"),
+        (["2026-01-15", "2027-01-15", "2028-01-15"], "annual"),
+        (["2026-01-15", "2026-03-01", "2027-01-15"], "irregular"),
+    ],
+)
+def test_univariate_statistics_classify_distribution_frequency(
+    dividend_dates: list[str],
+    expected_frequency: str,
+) -> None:
+    quotes = [
+        _quote("2026-01-01", 100.0),
+        _quote("2026-02-01", 101.0),
+        _quote("2026-03-01", 102.0),
+    ]
+
+    row = build_univariate_statistics(
+        quotes,
+        dividend_rows=[_dividend(dividend_date) for dividend_date in dividend_dates],
+    )[0]
+
+    assert row["distribution_frequency"] == expected_frequency
+    assert row["last_distribution_date"] == dividend_dates[-1]
+    assert row["distribution_observation_count"] == len(dividend_dates)
+
+
+def test_univariate_statistics_ignore_empty_and_zero_distribution_events() -> None:
+    quotes = [
+        _quote("2026-01-01", 100.0),
+        _quote("2026-02-01", 101.0),
+        _quote("2026-03-01", 102.0),
+    ]
+    dividends = [
+        _dividend(""),
+        _dividend("2026-01-15", value=0.0),
+        _dividend("2026-02-15"),
+    ]
+
+    row = build_univariate_statistics(quotes, dividend_rows=dividends)[0]
+
+    assert row["distribution_frequency"] == "unknown"
+    assert row["last_distribution_date"] == "2026-02-15"
+    assert row["distribution_observation_count"] == 1
 
 
 def test_univariate_statistics_reject_invalid_confidence_level() -> None:

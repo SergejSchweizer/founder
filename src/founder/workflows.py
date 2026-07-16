@@ -151,10 +151,17 @@ def run_univariate_statistics_workflow(
     )
     selected_rows = _metadata_selection_rows(paths, resolved_selection_id)
     quotes = _filter_quotes_to_selection(read_silver_quotes(paths), selected_rows)
-    rows = write_univariate_statistics(paths, quotes, confidence_level=confidence_level)
+    dividends = _filter_quotes_to_selection(_read_bronze_dividends(paths), selected_rows)
+    rows = write_univariate_statistics(
+        paths,
+        quotes,
+        dividend_rows=dividends,
+        confidence_level=confidence_level,
+    )
     LOGGER.info("univariate statistics complete root=%s rows=%s", root, len(rows))
     return {
         "quote_rows": len(quotes),
+        "dividend_rows": len(dividends),
         "selected_listing_count": len(selected_rows),
         "selection_id": resolved_selection_id,
         "univariate_statistics_rows": len(rows),
@@ -214,6 +221,13 @@ def _metadata_selection_rows(paths: LakePaths, selection_id: str) -> list[dict[s
     if not selection_path.exists():
         raise FileNotFoundError(f"metadata-filter selection does not exist: {selection_id}")
     return read_rows(selection_path)
+
+
+def _read_bronze_dividends(paths: LakePaths) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for path in sorted((paths.bronze / "dividends").glob("*/*/*.parquet")):
+        rows.extend(read_rows(path))
+    return rows
 
 
 def _current_metadata_selection_id(paths: LakePaths) -> str:
