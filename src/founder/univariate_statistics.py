@@ -51,6 +51,7 @@ def build_quote_returns(quote_rows: Sequence[Mapping[str, Any]]) -> list[JsonRow
 def build_univariate_statistics(
     quote_rows: Sequence[Mapping[str, Any]],
     *,
+    dividend_rows: Sequence[Mapping[str, Any]] = (),
     confidence_level: float = DEFAULT_CONFIDENCE_LEVEL,
 ) -> list[JsonRow]:
     """Compute only one-ISIN/listing statistics from quote rows.
@@ -62,6 +63,7 @@ def build_univariate_statistics(
     if not 0 < confidence_level < 1:
         raise ValueError("confidence_level must be in (0, 1)")
 
+    distributions_by_listing = _index_distribution_events(dividend_rows)
     quotes_by_listing: dict[tuple[str, str, str], list[Mapping[str, Any]]] = {}
     for row in quote_rows:
         key = (str(row["isin"]), str(row["exchange"]), str(row["code"]))
@@ -99,6 +101,9 @@ def build_univariate_statistics(
         downside_deviation = _downside_deviation(returns)
         tail_risk = _tail_risk(returns, confidence_level)
         log_price_trend = _log_price_trend(adjusted_closes)
+        distribution = _distribution_features(
+            distributions_by_listing.get((isin, exchange, code), ())
+        )
         statistics.append(
             {
                 "isin": isin,
@@ -147,6 +152,10 @@ def build_univariate_statistics(
                 "log_price_slope": log_price_trend[0],
                 "trend_r_squared": log_price_trend[1],
                 "availability_reason": "ok" if len(returns) >= 2 else "insufficient_returns",
+                "distribution_frequency": distribution["distribution_frequency"],
+                "distribution_events_per_year": distribution["distribution_events_per_year"],
+                "last_distribution_date": distribution["last_distribution_date"],
+                "distribution_observation_count": distribution["distribution_observation_count"],
             }
         )
     return statistics
@@ -156,10 +165,15 @@ def write_univariate_statistics(
     paths: LakePaths,
     quote_rows: Sequence[Mapping[str, Any]],
     *,
+    dividend_rows: Sequence[Mapping[str, Any]] = (),
     confidence_level: float = DEFAULT_CONFIDENCE_LEVEL,
 ) -> list[JsonRow]:
     """Write Univariate Statistics rows to Gold paths by listing."""
-    rows = build_univariate_statistics(quote_rows, confidence_level=confidence_level)
+    rows = build_univariate_statistics(
+        quote_rows,
+        dividend_rows=dividend_rows,
+        confidence_level=confidence_level,
+    )
     validate_rows("univariate_statistics", rows)
     for row in rows:
         write_rows(paths.gold_univariate_statistics(str(row["exchange"]), str(row["isin"])), [row])
@@ -168,6 +182,65 @@ def write_univariate_statistics(
 
 def _mean(values: Sequence[float]) -> float:
     return sum(values) / len(values) if values else 0.0
+
+
+def _index_distribution_events(
+    dividend_rows: Sequence[Mapping[str, Any]],
+) -> dict[tuple[str, str, str], tuple[date, ...]]:
+    indexed: dict[tuple[str, str, str], set[date]] = {}
+    for row in dividend_rows:
+        raw_date = str(row.get("date", "")).strip()
+        if not raw_date:
+            continue
+        value = float(row.get("value", row.get("unadjustedValue", 0.0)) or 0.0)
+        if value <= 0:
+            continue
+        key = (str(row["isin"]), str(row["exchange"]), str(row["code"]))
+        indexed.setdefault(key, set()).add(date.fromisoformat(raw_date))
+    return {key: tuple(sorted(values)) for key, values in indexed.items()}
+
+
+def _distribution_features(distribution_dates: Sequence[date]) -> JsonRow:
+    observation_count = len(distribution_dates)
+    if observation_count == 0:
+        return {
+            "distribution_frequency": "accumulating",
+            "distribution_events_per_year": 0.0,
+            "last_distribution_date": "",
+            "distribution_observation_count": 0,
+        }
+    if observation_count == 1:
+        return {
+            "distribution_frequency": "unknown",
+            "distribution_events_per_year": 1.0,
+            "last_distribution_date": distribution_dates[-1].isoformat(),
+            "distribution_observation_count": 1,
+        }
+
+    elapsed_days = max(1, (distribution_dates[-1] - distribution_dates[0]).days)
+    events_per_year = ((observation_count - 1) / elapsed_days) * 365.25
+    return {
+        "distribution_frequency": _distribution_frequency(distribution_dates),
+        "distribution_events_per_year": events_per_year,
+        "last_distribution_date": distribution_dates[-1].isoformat(),
+        "distribution_observation_count": observation_count,
+    }
+
+
+def _distribution_frequency(distribution_dates: Sequence[date]) -> str:
+    gaps = [
+        (current - previous).days
+        for previous, current in zip(distribution_dates, distribution_dates[1:], strict=False)
+    ]
+    if all(20 <= gap <= 45 for gap in gaps):
+        return "monthly"
+    if all(70 <= gap <= 110 for gap in gaps):
+        return "quarterly"
+    if all(150 <= gap <= 220 for gap in gaps):
+        return "semiannual"
+    if all(300 <= gap <= 430 for gap in gaps):
+        return "annual"
+    return "irregular"
 
 
 def _sample_variance(values: Sequence[float]) -> float:

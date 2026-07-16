@@ -24,6 +24,19 @@ def _quote(isin: str, exchange: str, code: str, date: str, close: float) -> dict
     }
 
 
+def _dividend(isin: str, exchange: str, code: str, date: str, value: float) -> dict[str, object]:
+    return {
+        "run_id": "bronze-1",
+        "isin": isin,
+        "exchange": exchange,
+        "code": code,
+        "date": date,
+        "value": value,
+        "unadjustedValue": value,
+        "currency": "EUR",
+    }
+
+
 def test_cli_prints_project_name(capsys: pytest.CaptureFixture[str]) -> None:
     main([])
 
@@ -93,6 +106,14 @@ def test_cli_runs_univariate_and_bivariate_statistics_modules(
         ],
     )
     write_rows(
+        paths.bronze_dataset_file("dividends", "XETRA", 2026, "IE1"),
+        [_dividend("IE1", "XETRA", "AAA", "2026-02-15", 1.0)],
+    )
+    write_rows(
+        paths.bronze_dataset_file("dividends", "AS", 2026, "IE2"),
+        [_dividend("IE2", "AS", "BBB", "2026-02-15", 1.0)],
+    )
+    write_rows(
         paths.metadata_filter_isins("selected-ie1"),
         [
             {
@@ -139,8 +160,12 @@ def test_cli_runs_univariate_and_bivariate_statistics_modules(
     assert univariate_payload["selection_id"] == "selected-ie1"
     assert univariate_payload["selected_listing_count"] == 1
     assert univariate_payload["quote_rows"] == 3
+    assert univariate_payload["dividend_rows"] == 1
     assert univariate_payload["univariate_statistics_rows"] == 1
-    assert len(read_rows(paths.gold_univariate_statistics("XETRA", "IE1"))) == 1
+    gold_rows = read_rows(paths.gold_univariate_statistics("XETRA", "IE1"))
+    assert len(gold_rows) == 1
+    assert gold_rows[0]["distribution_frequency"] == "unknown"
+    assert gold_rows[0]["last_distribution_date"] == "2026-02-15"
     assert read_rows(paths.gold_univariate_statistics("AS", "IE2")) == []
 
     main(["bivariate-statistics", "--root", str(root)])
@@ -161,6 +186,11 @@ def test_cli_runs_univariate_and_bivariate_statistics_modules(
         )
         == 1
     )
+
+
+def test_cli_univariate_statistics_requires_metadata_selection(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError, match="run metadata-filter first"):
+        main(["univariate-statistics", "--root", str(tmp_path / "lake")])
 
 
 def test_cli_restricts_bivariate_statistics_to_selection(

@@ -269,6 +269,10 @@ SCHEMAS: dict[str, tuple[str, ...]] = {
         "log_price_slope",
         "trend_r_squared",
         "availability_reason",
+        "distribution_frequency",
+        "distribution_events_per_year",
+        "last_distribution_date",
+        "distribution_observation_count",
     ),
     "bivariate_statistics": (
         "pair_key",
