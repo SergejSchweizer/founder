@@ -960,7 +960,7 @@ Idempotency: Re-running the same solver request writes the same target-weight an
 
 Branch: `feat/production-risk-optimizers`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/101.
 
 Priority: P1 robust portfolio construction.
 
