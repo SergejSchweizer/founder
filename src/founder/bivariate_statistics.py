@@ -18,7 +18,7 @@ from founder.gold_pair_stats import (
 )
 from founder.paths import LakePaths
 from founder.schemas import validate_rows
-from founder.table_io import JsonRow, write_rows
+from founder.table_io import JsonRow, read_rows, write_rows
 
 
 def build_bivariate_statistics(
@@ -62,11 +62,28 @@ def write_bivariate_statistics(
     concurrency: int | None = None,
 ) -> list[JsonRow]:
     """Write Bivariate Statistics rows to stable Gold paths by listing pair."""
-    rows = build_bivariate_statistics(
-        return_rows,
-        skip_same_isin=skip_same_isin,
-        concurrency=concurrency,
+    pairs = list(
+        iter_pair_observations(
+            index_returns(return_rows),
+            include_self=False,
+            skip_same_isin=skip_same_isin,
+        )
     )
+    cached_rows: list[JsonRow] = []
+    stale_pairs: list[PairObservation] = []
+    for pair in pairs:
+        cached = _cached_bivariate_pair_row(paths, pair)
+        if cached is None:
+            stale_pairs.append(pair)
+        else:
+            cached_rows.append(cached)
+
+    workers = _worker_count(concurrency)
+    if workers == 1 or len(stale_pairs) <= 1:
+        rows = [_build_bivariate_pair_statistics(pair) for pair in stale_pairs]
+    else:
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            rows = list(executor.map(_build_bivariate_pair_statistics, stale_pairs))
     validate_rows("bivariate_statistics", rows)
     for row in rows:
         write_rows(
@@ -80,7 +97,7 @@ def write_bivariate_statistics(
             ),
             [row],
         )
-    return rows
+    return sort_pair_rows(cached_rows + rows)
 
 
 def _worker_count(concurrency: int | None) -> int:
@@ -124,6 +141,32 @@ def _build_bivariate_pair_statistics(pair: PairObservation) -> JsonRow:
         "left_beta_to_right": _ratio(covariance, right_variance),
         "right_beta_to_left": _ratio(covariance, left_variance),
     }
+
+
+def _cached_bivariate_pair_row(paths: LakePaths, pair: PairObservation) -> JsonRow | None:
+    cached = read_rows(
+        paths.gold_bivariate_statistics_pair(
+            pair.left[1],
+            pair.left[0],
+            pair.left[2],
+            pair.right[1],
+            pair.right[0],
+            pair.right[2],
+        )
+    )
+    if len(cached) != 1:
+        return None
+    row = cached[0]
+    if (
+        str(row.get("pair_key")) == _pair_key(pair.left, pair.right)
+        and str(row.get("left_listing_key")) == _listing_key(pair.left)
+        and str(row.get("right_listing_key")) == _listing_key(pair.right)
+        and str(row.get("date_start")) == (pair.dates[0] if pair.dates else "")
+        and str(row.get("date_end")) == (pair.dates[-1] if pair.dates else "")
+        and int(row.get("n_observations", -1)) == len(pair.dates)
+    ):
+        return row
+    return None
 
 
 def _listing_key(listing: tuple[str, str, str]) -> str:

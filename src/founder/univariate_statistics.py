@@ -11,7 +11,7 @@ from typing import Any
 
 from founder.paths import LakePaths
 from founder.schemas import validate_rows
-from founder.table_io import JsonRow, write_rows
+from founder.table_io import JsonRow, read_rows, write_rows
 
 ANNUAL_TRADING_DAYS = 252
 DEFAULT_CONFIDENCE_LEVEL = 0.975
@@ -96,17 +96,84 @@ def write_univariate_statistics(
     confidence_level: float = DEFAULT_CONFIDENCE_LEVEL,
     concurrency: int | None = None,
 ) -> list[JsonRow]:
-    """Write Univariate Statistics rows to Gold paths by listing."""
+    """Write Univariate Statistics rows to stable Gold paths by listing."""
+    quotes_by_listing = _group_listing_rows(quote_rows)
+    dividends_by_listing = _group_listing_rows(dividend_rows)
+    cached_rows: list[JsonRow] = []
+    stale_quotes: list[Mapping[str, Any]] = []
+    stale_dividends: list[Mapping[str, Any]] = []
+    for key, rows in sorted(quotes_by_listing.items()):
+        cached = _cached_univariate_row(
+            paths,
+            key,
+            rows,
+            dividends_by_listing.get(key, ()),
+            confidence_level=confidence_level,
+        )
+        if cached is None:
+            stale_quotes.extend(rows)
+            stale_dividends.extend(dividends_by_listing.get(key, ()))
+        else:
+            cached_rows.append(cached)
+
     rows = build_univariate_statistics(
-        quote_rows,
-        dividend_rows=dividend_rows,
+        stale_quotes,
+        dividend_rows=stale_dividends,
         confidence_level=confidence_level,
         concurrency=concurrency,
     )
     validate_rows("univariate_statistics", rows)
     for row in rows:
         write_rows(paths.gold_univariate_statistics(str(row["exchange"]), str(row["isin"])), [row])
-    return rows
+    return sorted(
+        cached_rows + rows,
+        key=lambda row: (str(row["isin"]), str(row["exchange"]), str(row["code"])),
+    )
+
+
+def _group_listing_rows(
+    rows: Sequence[Mapping[str, Any]],
+) -> dict[tuple[str, str, str], list[Mapping[str, Any]]]:
+    grouped: dict[tuple[str, str, str], list[Mapping[str, Any]]] = {}
+    for row in rows:
+        key = (str(row["isin"]), str(row["exchange"]), str(row["code"]))
+        grouped.setdefault(key, []).append(row)
+    return grouped
+
+
+def _cached_univariate_row(
+    paths: LakePaths,
+    key: tuple[str, str, str],
+    quote_rows: Sequence[Mapping[str, Any]],
+    dividend_rows: Sequence[Mapping[str, Any]],
+    *,
+    confidence_level: float,
+) -> JsonRow | None:
+    isin, exchange, code = key
+    cached = read_rows(paths.gold_univariate_statistics(exchange, isin))
+    if len(cached) != 1:
+        return None
+    row = cached[0]
+    ordered_quotes = sorted(quote_rows, key=lambda quote: str(quote["date"]))
+    valid_dividends = [
+        dividend
+        for dividend in dividend_rows
+        if float(dividend.get("value", dividend.get("unadjustedValue", 0.0)) or 0.0) > 0
+    ]
+    last_distribution_date = max((str(row["date"]) for row in valid_dividends), default="")
+    if (
+        str(row.get("isin")) == isin
+        and str(row.get("exchange")) == exchange
+        and str(row.get("code")) == code
+        and float(row.get("confidence_level", -1.0)) == confidence_level
+        and int(row.get("quote_observation_count", -1)) == len(ordered_quotes)
+        and str(row.get("first_quote_date")) == str(ordered_quotes[0]["date"])
+        and str(row.get("last_quote_date")) == str(ordered_quotes[-1]["date"])
+        and str(row.get("last_distribution_date", "")) == last_distribution_date
+        and int(row.get("distribution_observation_count", -1)) == len(valid_dividends)
+    ):
+        return row
+    return None
 
 
 def _worker_count(concurrency: int | None) -> int:

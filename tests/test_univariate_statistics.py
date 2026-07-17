@@ -85,6 +85,35 @@ def test_univariate_statistics_are_univariate_and_reference_one_listing(tmp_path
     assert read_rows(paths.gold_univariate_statistics("XETRA", "IE1")) == statistics
 
 
+def test_univariate_statistics_reuses_cached_listing_artifacts(tmp_path: Path) -> None:
+    paths = LakePaths(root=tmp_path / "lake")
+    quotes = [
+        _quote("2026-01-01", 100.0),
+        _quote("2026-01-02", 110.0),
+        _quote("2026-01-03", 120.0),
+    ]
+    dividends = [_dividend("2026-02-15")]
+
+    first = write_univariate_statistics(
+        paths,
+        quotes,
+        dividend_rows=dividends,
+        confidence_level=0.75,
+    )
+    path = paths.gold_univariate_statistics("XETRA", "IE1")
+    first_mtime = path.stat().st_mtime_ns
+
+    second = write_univariate_statistics(
+        paths,
+        quotes,
+        dividend_rows=dividends,
+        confidence_level=0.75,
+    )
+
+    assert second == first
+    assert path.stat().st_mtime_ns == first_mtime
+
+
 def test_univariate_statistics_detect_monthly_distribution_frequency() -> None:
     quotes = [
         _quote("2026-01-01", 100.0),

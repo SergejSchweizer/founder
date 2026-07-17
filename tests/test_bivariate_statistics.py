@@ -55,6 +55,33 @@ def test_bivariate_statistics_use_common_dates_and_pairwise_metrics(tmp_path: Pa
     ) == [row]
 
 
+def test_bivariate_statistics_reuses_cached_pairs_and_writes_delta(tmp_path: Path) -> None:
+    paths = LakePaths(root=tmp_path / "lake")
+    first_selection = [
+        _return("IE1", "XETRA", "AAA", "2026-01-01", 0.01),
+        _return("IE1", "XETRA", "AAA", "2026-01-02", 0.02),
+        _return("IE2", "AS", "BBB", "2026-01-01", 0.03),
+        _return("IE2", "AS", "BBB", "2026-01-02", 0.02),
+    ]
+    first = write_bivariate_statistics(paths, first_selection)
+    cached_path = paths.gold_bivariate_statistics_pair("XETRA", "IE1", "AAA", "AS", "IE2", "BBB")
+    first_mtime = cached_path.stat().st_mtime_ns
+
+    expanded_selection = [
+        *first_selection,
+        _return("IE3", "PA", "CCC", "2026-01-01", 0.04),
+        _return("IE3", "PA", "CCC", "2026-01-02", 0.05),
+    ]
+    expanded = write_bivariate_statistics(paths, expanded_selection)
+
+    assert len(first) == 1
+    assert len(expanded) == 3
+    assert cached_path.stat().st_mtime_ns == first_mtime
+    assert read_rows(
+        paths.gold_bivariate_statistics_pair("XETRA", "IE1", "AAA", "PA", "IE3", "CCC")
+    )
+
+
 def test_bivariate_statistics_skip_same_isin_pairs_by_default() -> None:
     returns = [
         _return("IE1", "XETRA", "AAA", "2026-01-01", 0.01),

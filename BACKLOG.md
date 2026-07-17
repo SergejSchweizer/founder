@@ -13,6 +13,7 @@ Last reviewed: 2026-07-17
 - [Refresh, Selection, And Update Module PR Stack](#refresh-selection-and-update-module-pr-stack)
 - [Production Portfolio Product PR Stack](#production-portfolio-product-pr-stack)
 - [Multivariate Statistics Module PR Stack](#multivariate-statistics-module-pr-stack)
+- [Generic Statistics Cache PR Stack](#generic-statistics-cache-pr-stack)
 - [Future Work After Finalization](#future-work-after-finalization)
 - [Update Rules](#update-rules)
 
@@ -1130,7 +1131,7 @@ Priority policy: `multivariate_statistics` is the portfolio-level counterpart to
 
 Branch: `feat/multivariate-statistics-baseline`.
 
-Git status: in progress. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/79.
 
 Priority: P0 selected-portfolio analytics entry point.
 
@@ -1205,6 +1206,72 @@ Final branch: `feat/multivariate-trading-monitoring-handoff`.
 Squash rule: Every PR title and final squash commit subject must use `type(optional-scope): subject`. The final PR must not be merged until PR69 through PR71 and their declared Production Portfolio Product dependencies are merged or explicitly superseded in this backlog.
 
 Required main merge gate: `merge-gate` must pass Ruff lint and format, architecture/import-boundary checks, Pyright strict, Pytest with at least 95% coverage, dataset schema-registry validation, and selected-membership multivariate integration tests. The series remains incomplete while `multivariate_statistics` can include unselected ISINs, read unrelated Gold return files for selected portfolio matrices, or label deterministic baselines as production candidates without the required production evidence.
+
+## Generic Statistics Cache PR Stack
+
+Priority policy: Univariate, Bivariate, and Multivariate Statistics should treat Metadata Filter and Univariate Filter outputs as selection views over stable Gold artifacts. Listing-level and pair-level statistics belong in reusable canonical paths keyed by listing or ordered listing pair. Selection commands should compute only missing or stale deltas, then return the full requested selection from cached plus newly computed rows. Multivariate portfolio runs may remain selection-parameter scoped, but they must consume generic listing and pair caches and record enough selection identity to avoid recomputing unchanged portfolios.
+
+### PR73. Generic Listing And Pair Statistics Cache
+
+Branch: `feat/generic-statistics-cache`.
+
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/80.
+
+Priority: P0 reusable Statistics cache baseline.
+
+Depends on: PR69.
+
+Scope: Make `write_univariate_statistics` and `write_bivariate_statistics` read existing Gold artifacts before computing. Reuse univariate rows when listing identity, confidence level, quote observation count, quote date bounds, and distribution-event state still match the input. Reuse bivariate rows when pair identity, common return date bounds, and common observation count still match the input. Return the full selected output as cached plus newly computed rows, and write only missing or stale deltas.
+
+Acceptance: Tests prove re-running unchanged Univariate Statistics does not rewrite listing artifacts, expanding a Bivariate selection keeps already computed pair files unchanged, and only new pair files are written for newly introduced combinations.
+
+Determinism: Cache hit checks use explicit listing keys, pair keys, date bounds, observation counts, and run parameters; no filesystem modification time is used to decide correctness.
+
+Idempotency: Re-running unchanged Metadata Filter selections returns the same rows and leaves matching Gold listing and pair artifacts untouched.
+
+### PR74. Selection Statistics Views
+
+Branch: `feat/statistics-selection-views`.
+
+Git status: not started. PR: TBD.
+
+Priority: P1 generic retrieval by Metadata Filter selection.
+
+Depends on: PR73.
+
+Scope: Add explicit selection-view artifacts that materialize which cached univariate and bivariate rows belong to each Metadata Filter or Univariate Filter selection. Add read APIs and CLI summaries that can load a selection's statistics without recomputing when all referenced cache rows are present and fresh.
+
+Acceptance: Tests prove any persisted Metadata Filter selection can retrieve its univariate rows and pair rows from generic Gold cache paths, missing cache rows are reported deterministically, and view regeneration is idempotent.
+
+Determinism: Selection views are keyed by `selection_id`, source module, selected listing keys, statistic version, and parameter set.
+
+Idempotency: Rebuilding an unchanged selection view produces byte-equivalent rows and does not rewrite canonical statistic rows.
+
+### PR75. Multivariate Selection Cache Consumption
+
+Branch: `feat/multivariate-selection-cache-consumption`.
+
+Git status: not started. PR: TBD.
+
+Priority: P1 portfolio delta reduction.
+
+Depends on: PR74.
+
+Scope: Teach `multivariate_statistics` to consume selection statistics views for returns, asset metrics, covariance/correlation inputs, and pair diagnostics before running portfolio-level calculations. Persist portfolio run identity from selected listing keys plus optimizer, evaluation, rebalance, tail-risk, and frontier parameters so unchanged portfolio runs can be reused safely.
+
+Acceptance: Tests prove unchanged multivariate selection runs reuse generic inputs and portfolio artifacts, changed selections compute only the new listing/pair input deltas before portfolio recomputation, and portfolio outputs never include unselected listings.
+
+Determinism: Portfolio cache ids are derived from sorted selected listing keys, input statistic versions, and explicit portfolio parameters.
+
+Idempotency: Re-running an unchanged multivariate selection leaves generic input caches and portfolio outputs unchanged while returning the same JSON summary.
+
+### Series Completion Gate
+
+Final branch: `feat/multivariate-selection-cache-consumption`.
+
+Squash rule: Every PR title and final squash commit subject must use `type(optional-scope): subject`. The final PR must not be merged until PR73 and PR74 are merged or explicitly superseded in this backlog.
+
+Required main merge gate: `merge-gate` must pass Ruff lint and format, architecture/import-boundary checks, Pyright strict, Pytest with at least 95% coverage, dataset schema-registry validation, and cache-hit/cache-miss integration tests for Metadata Filter selections.
 
 ## Future Work After Finalization
 
