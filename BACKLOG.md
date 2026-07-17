@@ -1215,7 +1215,7 @@ Priority policy: Univariate, Bivariate, and Multivariate Statistics should treat
 
 Branch: `feat/generic-statistics-cache`.
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/80.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/80.
 
 Priority: P0 reusable Statistics cache baseline.
 
