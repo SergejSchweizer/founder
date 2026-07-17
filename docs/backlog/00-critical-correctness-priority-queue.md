@@ -171,6 +171,10 @@ An unchanged run reuses complete buckets and writes no duplicate pair rows. Resu
 
 ## Mandatory Amendments To PR58
 
+Branch: `fix/risk-model-covariance-completeness`.
+
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/97.
+
 PR58 remains the first risk-model PR after the immediate hotfixes. Its existing scope must be strengthened with these non-negotiable requirements.
 
 ### Missing Covariance Is Not Zero
