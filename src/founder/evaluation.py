@@ -10,6 +10,7 @@ from typing import Any
 from founder.gold import covariance
 from founder.paths import LakePaths
 from founder.portfolio import PortfolioConstraints, optimize_portfolio
+from founder.return_quality import MIN_HISTORY_LONG, MIN_HISTORY_MEDIUM, MIN_HISTORY_SHORT
 from founder.table_io import JsonRow, read_rows, write_rows
 
 ANNUAL_TRADING_DAYS = 252
@@ -25,10 +26,12 @@ def read_gold_returns(paths: LakePaths) -> list[JsonRow]:
 def build_return_matrix(
     return_rows: Sequence[Mapping[str, Any]], evaluation_id: str
 ) -> list[JsonRow]:
-    by_listing: dict[tuple[str, str, str], dict[str, float]] = {}
+    by_listing: dict[tuple[str, str, str], dict[str, tuple[float, float]]] = {}
     for row in return_rows:
         key = (str(row["isin"]), str(row["exchange"]), str(row["code"]))
-        by_listing.setdefault(key, {})[str(row["date"])] = float(row["return"])
+        log_return = float(row["return"])
+        simple_return = float(row["simple_return"]) if "simple_return" in row else log_return
+        by_listing.setdefault(key, {})[str(row["date"])] = (log_return, simple_return)
     if not by_listing:
         return []
 
@@ -39,6 +42,7 @@ def build_return_matrix(
     matrix: list[JsonRow] = []
     for date in sorted(common_dates):
         for isin, exchange, code in sorted(by_listing):
+            log_return, simple_return = by_listing[(isin, exchange, code)][date]
             matrix.append(
                 {
                     "evaluation_id": evaluation_id,
@@ -46,7 +50,8 @@ def build_return_matrix(
                     "isin": isin,
                     "exchange": exchange,
                     "code": code,
-                    "return": by_listing[(isin, exchange, code)][date],
+                    "return": log_return,
+                    "simple_return": simple_return,
                 }
             )
     return matrix
@@ -127,13 +132,14 @@ def build_asset_metrics(
         annualized_return = mean_return * ANNUAL_TRADING_DAYS
         annualized_volatility = volatility * sqrt(ANNUAL_TRADING_DAYS)
         var, cvar, tail_observation_count = _historical_tail_risk(returns, confidence_level)
+        observation_count = len(returns)
         metrics.append(
             {
                 "evaluation_id": evaluation_id,
                 "isin": isin,
                 "exchange": exchange,
                 "code": code,
-                "observation_count": len(returns),
+                "observation_count": observation_count,
                 "first_return_date": str(ordered[0]["date"]) if ordered else "",
                 "last_return_date": str(ordered[-1]["date"]) if ordered else "",
                 "mean_return": mean_return,
@@ -146,9 +152,25 @@ def build_asset_metrics(
                 "var": var,
                 "cvar": cvar,
                 "tail_observation_count": tail_observation_count,
+                "meets_min_history_252": observation_count >= MIN_HISTORY_SHORT,
+                "meets_min_history_504": observation_count >= MIN_HISTORY_MEDIUM,
+                "meets_min_history_756": observation_count >= MIN_HISTORY_LONG,
+                "production_eligible": observation_count >= MIN_HISTORY_SHORT,
             }
         )
     return metrics
+
+
+def _asset_simple_return(row: Mapping[str, Any]) -> float:
+    """Return the simple-return field for wealth compounding.
+
+    Falls back to the `return` field for legacy matrix rows that only carry a
+    log return, so existing callers built before Gold return rows carried an
+    explicit `simple_return` keep their prior numeric behavior unchanged.
+    """
+    if "simple_return" in row:
+        return float(row["simple_return"])
+    return float(row["return"])
 
 
 def build_portfolio_returns(
@@ -167,7 +189,8 @@ def build_portfolio_returns(
     rows: list[JsonRow] = []
     for item_date in sorted(by_date):
         daily_return = sum(
-            float(row["return"]) * validated_weights[str(row["isin"])] for row in by_date[item_date]
+            _asset_simple_return(row) * validated_weights[str(row["isin"])]
+            for row in by_date[item_date]
         )
         cumulative_wealth *= 1.0 + daily_return
         rows.append(

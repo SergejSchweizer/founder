@@ -14,6 +14,7 @@ GoldReturnRow = TypedDict(
         "code": str,
         "date": str,
         "return": float,
+        "simple_return": float,
     },
 )
 
@@ -61,6 +62,7 @@ ReturnMatrixRow = TypedDict(
         "exchange": str,
         "code": str,
         "return": float,
+        "simple_return": float,
     },
 )
 
@@ -189,7 +191,7 @@ SCHEMAS: dict[str, tuple[str, ...]] = {
         "missing_dates",
     ),
     "errors": ("run_id", "code", "exchange", "endpoint", "error_type", "message"),
-    "returns": ("isin", "exchange", "code", "date", "return"),
+    "returns": ("isin", "exchange", "code", "date", "return", "simple_return"),
     "correlation": (
         "left_isin",
         "left_exchange",
@@ -273,6 +275,16 @@ SCHEMAS: dict[str, tuple[str, ...]] = {
         "distribution_events_per_year",
         "last_distribution_date",
         "distribution_observation_count",
+        "quarantined_price_count",
+        "non_positive_price_detected",
+        "duplicate_date_detected",
+        "stale_price_detected",
+        "unexplained_gap_detected",
+        "meets_min_history_252",
+        "meets_min_history_504",
+        "meets_min_history_756",
+        "production_eligible",
+        "data_quality_reason",
     ),
     "bivariate_statistics": (
         "pair_key",
@@ -328,6 +340,7 @@ SCHEMAS: dict[str, tuple[str, ...]] = {
         "exchange",
         "code",
         "return",
+        "simple_return",
     ),
     "asset_metrics": (
         "evaluation_id",
@@ -347,6 +360,10 @@ SCHEMAS: dict[str, tuple[str, ...]] = {
         "var",
         "cvar",
         "tail_observation_count",
+        "meets_min_history_252",
+        "meets_min_history_504",
+        "meets_min_history_756",
+        "production_eligible",
     ),
     "portfolio_returns": (
         "evaluation_id",

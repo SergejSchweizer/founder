@@ -21,6 +21,7 @@ from founder.gold_pair_stats import (
     symmetric_pair_rows,
 )
 from founder.paths import LakePaths
+from founder.return_quality import filter_valid_price_points
 from founder.run_state import build_job_manifest, write_job_manifest
 from founder.schemas import validate_rows
 from founder.table_io import JsonRow, read_rows, write_rows
@@ -52,7 +53,8 @@ def build_returns(quote_rows: Sequence[Mapping[str, Any]]) -> list[JsonRow]:
     returns: list[JsonRow] = []
     for (isin, exchange, code), rows in sorted(by_listing.items()):
         ordered = sorted(rows, key=lambda row: str(row["date"]))
-        for previous, current in zip(ordered, ordered[1:], strict=False):
+        valid_quotes, _quarantined = filter_valid_price_points(ordered)
+        for previous, current in zip(valid_quotes, valid_quotes[1:], strict=False):
             previous_close = float(previous["adjusted_close"])
             current_close = float(current["adjusted_close"])
             returns.append(
@@ -61,9 +63,8 @@ def build_returns(quote_rows: Sequence[Mapping[str, Any]]) -> list[JsonRow]:
                     "exchange": exchange,
                     "code": code,
                     "date": str(current["date"]),
-                    "return": 0.0
-                    if previous_close <= 0 or current_close <= 0
-                    else log(current_close / previous_close),
+                    "return": log(current_close / previous_close),
+                    "simple_return": (current_close / previous_close) - 1.0,
                 }
             )
     return returns

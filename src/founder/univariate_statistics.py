@@ -10,6 +10,7 @@ from math import exp, log, sqrt
 from typing import Any
 
 from founder.paths import LakePaths
+from founder.return_quality import evaluate_quote_quality, filter_valid_price_points
 from founder.schemas import validate_rows
 from founder.table_io import JsonRow, read_rows, write_rows
 
@@ -27,15 +28,12 @@ def build_quote_returns(quote_rows: Sequence[Mapping[str, Any]]) -> list[JsonRow
     returns: list[JsonRow] = []
     for (isin, exchange, code), rows in sorted(by_listing.items()):
         ordered = sorted(rows, key=lambda row: str(row["date"]))
-        for previous, current in zip(ordered, ordered[1:], strict=False):
+        valid_quotes, _quarantined = filter_valid_price_points(ordered)
+        for previous, current in zip(valid_quotes, valid_quotes[1:], strict=False):
             previous_close = float(previous["adjusted_close"])
             current_close = float(current["adjusted_close"])
-            if previous_close <= 0 or current_close <= 0:
-                simple_return = 0.0
-                log_return = 0.0
-            else:
-                simple_return = (current_close / previous_close) - 1.0
-                log_return = log(current_close / previous_close)
+            simple_return = (current_close / previous_close) - 1.0
+            log_return = log(current_close / previous_close)
             returns.append(
                 {
                     "isin": isin,
@@ -214,6 +212,7 @@ def _build_univariate_listing_statistics(
     tail_risk = _tail_risk(returns, confidence_level)
     log_price_trend = _log_price_trend(adjusted_closes)
     distribution = _distribution_features(distribution_dates)
+    quality = evaluate_quote_quality(ordered_quotes)
     return {
         "isin": isin,
         "exchange": exchange,
@@ -265,6 +264,16 @@ def _build_univariate_listing_statistics(
         "distribution_events_per_year": distribution["distribution_events_per_year"],
         "last_distribution_date": distribution["last_distribution_date"],
         "distribution_observation_count": distribution["distribution_observation_count"],
+        "quarantined_price_count": quality["quarantined_price_count"],
+        "non_positive_price_detected": quality["non_positive_price_detected"],
+        "duplicate_date_detected": quality["duplicate_date_detected"],
+        "stale_price_detected": quality["stale_price_detected"],
+        "unexplained_gap_detected": quality["unexplained_gap_detected"],
+        "meets_min_history_252": quality["meets_min_history_252"],
+        "meets_min_history_504": quality["meets_min_history_504"],
+        "meets_min_history_756": quality["meets_min_history_756"],
+        "production_eligible": quality["production_eligible"],
+        "data_quality_reason": quality["data_quality_reason"],
     }
 
 

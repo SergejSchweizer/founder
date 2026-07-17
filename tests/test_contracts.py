@@ -109,6 +109,7 @@ def test_gold_evaluation_schema_contracts_are_registered() -> None:
         "exchange",
         "code",
         "return",
+        "simple_return",
     )
     assert "annualized_volatility" in required_fields("asset_metrics")
     assert "sharpe_ratio" in required_fields("asset_metrics")

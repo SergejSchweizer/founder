@@ -449,7 +449,9 @@ def test_gold_returns_use_adjusted_close_log_returns() -> None:
         ]
     )
 
-    assert [row["return"] for row in returns] == [pytest.approx(log(110 / 100)), 0.0]
+    assert [row["return"] for row in returns] == [pytest.approx(log(110 / 100))]
+    assert all(row["isin"] == "IE1" for row in returns)
+    assert returns[0]["simple_return"] == pytest.approx(0.10)
 
 
 def test_gold_correlation_edges_store_upper_triangle_by_bucket(tmp_path) -> None:  # type: ignore[no-untyped-def]
