@@ -17,8 +17,6 @@ founder = "founder.cli:main"
 founder-docs-refresh = "founder.docs_refresh:main"
 founder-fetch-all-quotes = "founder.fetch_all_quotes:main"
 founder-quality = "founder.quality:main"
-founder-selection = "founder.selection.cli:main"
-founder-update = "founder.update.cli:main"
 
 [dependency-groups]
 dev = [
