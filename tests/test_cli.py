@@ -521,6 +521,81 @@ def test_cli_bivariate_statistics_uses_latest_univariate_manifest_without_pointe
     assert payload["bivariate_statistics_rows"] == 1
 
 
+def test_cli_runs_multivariate_statistics_from_latest_univariate_selection(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = tmp_path / "lake"
+    paths = LakePaths(root=root)
+    for isin, exchange, code, prices in (
+        ("IE1", "XETRA", "AAA", (100.0, 101.0, 102.0, 103.0)),
+        ("IE2", "AS", "BBB", (100.0, 99.0, 101.0, 104.0)),
+        ("IE3", "PA", "CCC", (100.0, 100.0, 100.0, 100.0)),
+    ):
+        write_rows(
+            paths.silver_quote_file(exchange, isin),
+            [
+                _quote(isin, exchange, code, f"2026-01-0{index}", close)
+                for index, close in enumerate(prices, start=1)
+            ],
+        )
+    write_rows(
+        paths.univariate_filter_isins("latest-two"),
+        [
+            {
+                "selection_id": "latest-two",
+                "isin": "IE1",
+                "exchange": "XETRA",
+                "code": "AAA",
+                "name": "",
+                "source_module": "univariate_filter",
+            },
+            {
+                "selection_id": "latest-two",
+                "isin": "IE2",
+                "exchange": "AS",
+                "code": "BBB",
+                "name": "",
+                "source_module": "univariate_filter",
+            },
+        ],
+    )
+    write_json(
+        paths.univariate_filter_manifest("latest-two"),
+        {"selection_id": "latest-two", "created_at": "2026-01-02T00:00:00+00:00"},
+    )
+
+    main(
+        [
+            "multivariate-statistics",
+            "--root",
+            str(root),
+            "--evaluation-id",
+            "eval-multi",
+            "--portfolio-id-prefix",
+            "multi",
+            "--grid-step",
+            "0.5",
+            "--concurrency",
+            "1",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["selection_id"] == "latest-two"
+    assert payload["selected_listing_count"] == 2
+    assert payload["quote_rows"] == 8
+    assert payload["matrix_rows"] == 6
+    assert payload["portfolio_count"] >= 6
+    assert {row["isin"] for row in read_rows(paths.gold_return_matrix("eval-multi"))} == {
+        "IE1",
+        "IE2",
+    }
+    assert read_rows(paths.gold_portfolio_metrics("eval-multi"))
+    assert read_rows(paths.gold_optimized_weights("minimum_variance", "eval-multi"))
+    assert read_rows(paths.gold_tail_risk("eval-multi-tail-risk"))
+    assert read_rows(paths.gold_backtests("eval-multi-walk-forward"))
+
+
 def test_cli_bivariate_statistics_accepts_explicit_metadata_selection(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

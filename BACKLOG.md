@@ -12,6 +12,7 @@ Last reviewed: 2026-07-17
 - [Refactor Hardening PR Stack](#refactor-hardening-pr-stack)
 - [Refresh, Selection, And Update Module PR Stack](#refresh-selection-and-update-module-pr-stack)
 - [Production Portfolio Product PR Stack](#production-portfolio-product-pr-stack)
+- [Multivariate Statistics Module PR Stack](#multivariate-statistics-module-pr-stack)
 - [Future Work After Finalization](#future-work-after-finalization)
 - [Update Rules](#update-rules)
 
@@ -1120,6 +1121,90 @@ Final branch: `feat/local-reports-monitoring`.
 Squash rule: Every PR title and final squash commit subject must use `type(optional-scope): subject`. The final PR must not be merged until all prior PR56-PR67 branches are merged or explicitly superseded in this backlog.
 
 Required main merge gate: `merge-gate` must pass Ruff lint and format, architecture/import-boundary checks, Pyright strict, Pytest with at least 95% coverage, dataset schema-registry validation, and the production-candidate report tests added in this stack. The series remains incomplete while any production-candidate output can be generated without data-quality gates, consistent return semantics, risk-model diagnostics, solver diagnostics, baseline comparison, walk-forward evidence, costs, tail-risk/drawdown metrics, concentration/risk contributions, and explanation artifacts.
+
+## Multivariate Statistics Module PR Stack
+
+Priority policy: `multivariate_statistics` is the portfolio-level counterpart to `bivariate_statistics`. It must default to the latest ready `univariate_filter` membership, must never widen the universe implicitly, and must write portfolio analytics only for the selected ISIN listings. The module is an orchestration surface over existing Evaluation and Portfolio calculations first; production-grade optimizers, income objectives, recommendations, and trading outputs should be added by stacking on the Production Portfolio Product PR Stack instead of bloating the baseline PR.
+
+### PR69. Multivariate Statistics Baseline Module And CLI
+
+Branch: `feat/multivariate-statistics-baseline`.
+
+Git status: in progress. PR: TBD.
+
+Priority: P0 selected-portfolio analytics entry point.
+
+Depends on: PR55.
+
+Scope: Add `founder.multivariate_statistics`, `founder multivariate-statistics`, and `run_multivariate_statistics_workflow`. Resolve the latest `univariate_filter` selection by default, filter Silver quotes to those selected listings, write selected Gold returns/correlation/covariance/features, build a selected return matrix and asset metrics, then run the currently available portfolio calculations: Equal Weight portfolio evaluation, deterministic Minimum Variance, Maximum Sharpe comparison, Risk Parity, HRP baseline, Maximum Diversification, efficient frontier, walk-forward backtest, rebalance simulation, and tail-risk evaluation. Add module locking and a JSON CLI summary.
+
+Acceptance: CLI tests prove the command uses the latest `univariate_filter` manifest without a pointer, excludes unselected ISINs, writes selected return matrix rows, writes portfolio metrics, writes optimized weights, writes tail-risk rows, and writes walk-forward rows. Re-running the command with the same evaluation id replaces or validates the same artifacts without appending duplicate portfolio rows.
+
+Determinism: Evaluation ids, portfolio ids, selected listing order, target-return grid, objective order, and output row ordering are explicit and stable. The command must not read unrelated Gold return files when constructing the selected return matrix.
+
+Idempotency: Re-running unchanged selected quotes and selection membership with the same options produces the same Gold, Evaluation, and Portfolio rows; it must not mutate metadata, univariate statistics, bivariate statistics, or Refresh state.
+
+### PR70. Multivariate Production Portfolio Adapter
+
+Branch: `feat/multivariate-production-adapter`.
+
+Git status: not started. PR: TBD.
+
+Priority: P1 production stack integration.
+
+Depends on: PR69 and PR63.
+
+Scope: Teach `multivariate_statistics` to consume the production data-quality gate, risk-model diagnostics, production solver outputs, profile constraints, and ensemble candidate artifacts introduced by PR56 through PR63. Keep deterministic baseline objectives available behind explicit flags, but make production-candidate summaries require quality gates, solver diagnostics, risk contributions, and baseline comparisons.
+
+Acceptance: Tests prove production mode refuses invalid prices, insufficient history, missing risk-model diagnostics, infeasible constraints, and missing baseline comparisons. Tests also prove Balanced profile output includes HRP, ERC, shrinkage Minimum Variance, and ensemble rows when the prerequisite artifacts exist.
+
+Determinism: Production adapter ids include selection membership, quality policy, risk-model ids, optimizer ids, profile version, and constraint version.
+
+Idempotency: Re-running production multivariate analysis with unchanged prerequisite artifacts reuses those artifacts and writes the same analysis summary without recomputing lower-level caches.
+
+### PR71. Multivariate Income And Recommendation Outputs
+
+Branch: `feat/multivariate-income-recommendations`.
+
+Git status: not started. PR: TBD.
+
+Priority: P2/P3 user-facing decision support.
+
+Depends on: PR70 and PR66.
+
+Scope: Extend `multivariate_statistics` to include income quality, sustainable income, NAV erosion, income efficiency, recommendation scorecards, explainable selection and exclusion reasons, candidate disadvantages, and production-candidate status for Defensive, Balanced, Income, and Growth profiles. Keep reports traceable to Selection, Update, and Portfolio artifacts rather than recomputing formulas locally.
+
+Acceptance: Tests cover income profile output, unsupported-distribution warnings, NAV-erosion warnings, recommendation reason propagation, no guaranteed-return language, and deterministic structured report payloads for the selected membership.
+
+Determinism: Recommendation summaries derive only from pinned income artifacts, model-comparison scorecards, stress results, profile settings, and report template versions.
+
+Idempotency: Re-running unchanged income/recommendation multivariate analysis produces the same report artifacts and does not alter optimizer, backtest, Selection, Refresh, or Update artifacts.
+
+### PR72. Multivariate Trading And Monitoring Handoff
+
+Branch: `feat/multivariate-trading-monitoring-handoff`.
+
+Git status: not started. PR: TBD.
+
+Priority: P4 end-user workflow handoff.
+
+Depends on: PR71 and PR68.
+
+Scope: Add an optional `multivariate_statistics` handoff to current-position transition analysis, Flatex export, local project report generation, and monitoring statuses. The module may reference approved recommendation weights and transition outputs, but it must not decide broker execution or alter current positions.
+
+Acceptance: Tests prove the handoff rejects unapproved recommendations by default, includes current-versus-target differences when current positions are supplied, links deterministic Flatex export paths, and emits monitoring-ready drift, risk, stale-data, distribution-cut, and NAV-erosion statuses.
+
+Determinism: Handoff ids include recommendation id, current-position snapshot id, transition-plan id, monitoring policy id, and report template version.
+
+Idempotency: Re-running unchanged handoff inputs produces the same references and local report status without duplicate trade rows, alerts, or pointer changes.
+
+### Series Completion Gate
+
+Final branch: `feat/multivariate-trading-monitoring-handoff`.
+
+Squash rule: Every PR title and final squash commit subject must use `type(optional-scope): subject`. The final PR must not be merged until PR69 through PR71 and their declared Production Portfolio Product dependencies are merged or explicitly superseded in this backlog.
+
+Required main merge gate: `merge-gate` must pass Ruff lint and format, architecture/import-boundary checks, Pyright strict, Pytest with at least 95% coverage, dataset schema-registry validation, and selected-membership multivariate integration tests. The series remains incomplete while `multivariate_statistics` can include unselected ISINs, read unrelated Gold return files for selected portfolio matrices, or label deterministic baselines as production candidates without the required production evidence.
 
 ## Future Work After Finalization
 
