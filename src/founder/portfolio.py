@@ -17,6 +17,22 @@ RISK_PARITY_OBJECTIVES = {"risk_parity", "equal_risk_contribution"}
 MAXIMUM_DIVERSIFICATION_OBJECTIVE = "maximum_diversification"
 BASELINE_OPTIMIZER_TYPE = "deterministic_baseline"
 PRODUCTION_OPTIMIZER_TYPE = "production_solver"
+GRID_OBJECTIVES = frozenset(
+    {
+        "minimum_variance",
+        "maximum_sharpe",
+        "target_return_minimum_variance",
+        MAXIMUM_DIVERSIFICATION_OBJECTIVE,
+        *RISK_PARITY_OBJECTIVES,
+    }
+)
+PRODUCTION_SOLVER_MODE = "production"
+BASELINE_SOLVER_MODE = "baseline"
+SOLVER_MODES = (PRODUCTION_SOLVER_MODE, BASELINE_SOLVER_MODE)
+OPTIMIZER_ALGORITHM_VERSION = 1
+WEIGHT_SUM_TOLERANCE = 1e-9
+EQUAL_WEIGHT_FALLBACK_METHOD = "equal_weight_fallback"
+CANDIDATE_LIMIT_EXCEEDED_REASON = "candidate_limit_exceeded"
 
 
 @dataclass(frozen=True)
@@ -51,26 +67,56 @@ class PortfolioConstraints:
 class OptimizerDiagnostics:
     optimizer_type: str
     optimizer_status: str
+    requested_method: str
+    actual_method: str
+    solver_name: str
+    solver_version: int
+    solver_status: str
+    convergence_status: str
     objective_value: float
     expected_return: float
     portfolio_variance: float
     constraint_violations: tuple[str, ...]
+    constraint_residuals: tuple[float, ...]
+    bound_activity: tuple[str, ...]
     covariance_condition: str
     missing_covariance_count: int
+    non_finite_covariance_count: int
     input_listing_count: int
+    iteration_count: int
+    numeric_tolerances: Mapping[str, float]
+    risk_model_id: str
+    fallback_used: bool
+    fallback_reason: str
+    production_eligible: bool
     turnover_estimate: float = 0.0
 
     def as_dict(self) -> JsonRow:
         return {
             "optimizer_type": self.optimizer_type,
             "optimizer_status": self.optimizer_status,
+            "requested_method": self.requested_method,
+            "actual_method": self.actual_method,
+            "solver_name": self.solver_name,
+            "solver_version": self.solver_version,
+            "solver_status": self.solver_status,
+            "convergence_status": self.convergence_status,
             "objective_value": self.objective_value,
             "expected_return": self.expected_return,
             "portfolio_variance": self.portfolio_variance,
             "constraint_violations": list(self.constraint_violations),
+            "constraint_residuals": list(self.constraint_residuals),
+            "bound_activity": list(self.bound_activity),
             "covariance_condition": self.covariance_condition,
             "missing_covariance_count": self.missing_covariance_count,
+            "non_finite_covariance_count": self.non_finite_covariance_count,
             "input_listing_count": self.input_listing_count,
+            "iteration_count": self.iteration_count,
+            "numeric_tolerances": dict(self.numeric_tolerances),
+            "risk_model_id": self.risk_model_id,
+            "fallback_used": self.fallback_used,
+            "fallback_reason": self.fallback_reason,
+            "production_eligible": self.production_eligible,
             "turnover_estimate": self.turnover_estimate,
         }
 
@@ -140,6 +186,35 @@ def equal_weight_seed(isins: list[str], constraints: PortfolioConstraints) -> di
     return weights
 
 
+def exact_candidate_count(listing_count: int, grid_step: float) -> int:
+    """Return the exact number of grid candidates for a listing count and grid step."""
+    if not 0 < grid_step <= 1:
+        raise ValueError("grid_step must be in (0, 1]")
+    steps = round(1.0 / grid_step)
+    if not isclose(steps * grid_step, 1.0, rel_tol=0.0, abs_tol=1e-9):
+        raise ValueError("grid_step must divide 1")
+    return comb(listing_count + steps - 1, steps)
+
+
+def is_candidate_limit_exceeded(listing_count: int, grid_step: float) -> bool:
+    """Return whether the exact grid enumeration exceeds MAX_EXACT_WEIGHT_CANDIDATES."""
+    return exact_candidate_count(listing_count, grid_step) > MAX_EXACT_WEIGHT_CANDIDATES
+
+
+def resolve_actual_optimizer_method(objective: str, listing_count: int, grid_step: float) -> str:
+    """Return the method actually executed, detecting a candidate-limit fallback.
+
+    Pure and deterministic: depends only on the objective, listing count, and
+    grid step, never on the resulting weights, so a genuine optimum that
+    coincidentally matches Equal Weight is never mistaken for a fallback.
+    """
+    if objective == "equal_weight" or objective not in GRID_OBJECTIVES:
+        return objective
+    if is_candidate_limit_exceeded(listing_count, grid_step):
+        return EQUAL_WEIGHT_FALLBACK_METHOD
+    return objective
+
+
 def minimum_variance_two_asset_weight(
     *,
     left_variance: float,
@@ -166,22 +241,27 @@ def optimize_portfolio(
     risk_free_rate: float = 0.0,
     target_return: float | None = None,
     grid_step: float = 0.01,
+    mode: str = BASELINE_SOLVER_MODE,
 ) -> dict[str, float]:
+    if mode not in SOLVER_MODES:
+        raise ValueError(f"unknown optimizer mode: {mode}")
     ordered = _listing_keys(listings)
     if objective == "equal_weight":
         return equal_weight_seed([isin for isin, _, _ in ordered], constraints)
 
-    if objective not in {
-        "minimum_variance",
-        "maximum_sharpe",
-        "target_return_minimum_variance",
-        MAXIMUM_DIVERSIFICATION_OBJECTIVE,
-        *RISK_PARITY_OBJECTIVES,
-    }:
+    if objective not in GRID_OBJECTIVES:
         raise ValueError(f"unknown optimization objective: {objective}")
     if objective == "target_return_minimum_variance" and target_return is None:
         raise ValueError("target_return is required")
     target_value = 0.0 if target_return is None else target_return
+
+    if mode == PRODUCTION_SOLVER_MODE and is_candidate_limit_exceeded(len(ordered), grid_step):
+        raise ValueError(
+            f"{CANDIDATE_LIMIT_EXCEEDED_REASON}: production mode requires a numerical solver "
+            f"for {len(ordered)} listings at grid_step={grid_step}, which is not yet "
+            "implemented; no production weights are produced for this request. Use "
+            f"mode='{BASELINE_SOLVER_MODE}' for an explicitly labeled Equal Weight fallback."
+        )
 
     covariances = _covariance_map(covariance_rows)
     require_complete_covariance(ordered, covariances)
@@ -251,20 +331,38 @@ def build_optimizer_diagnostics(
     objective: str,
     constraints: PortfolioConstraints,
     optimizer_type: str = BASELINE_OPTIMIZER_TYPE,
+    mode: str = BASELINE_SOLVER_MODE,
+    grid_step: float | None = None,
+    risk_model_id: str = "",
 ) -> JsonRow:
+    if mode not in SOLVER_MODES:
+        raise ValueError(f"unknown optimizer mode: {mode}")
     ordered = _listing_keys(listings)
     covariances = _covariance_map(covariance_rows)
     ordered_weights = tuple(float(weights[isin]) for isin, _, _ in ordered)
     expected_return = _portfolio_return(ordered, ordered_weights, expected_returns)
     violations = _constraint_violations(weights, constraints)
     missing_covariances, non_finite_covariances = _covariance_completeness(ordered, covariances)
+
+    fallback_used = False
+    fallback_reason = ""
+    iteration_count = 1
+    if objective in GRID_OBJECTIVES and grid_step is not None:
+        candidate_count = exact_candidate_count(len(ordered), grid_step)
+        if candidate_count > MAX_EXACT_WEIGHT_CANDIDATES:
+            fallback_used = True
+            fallback_reason = CANDIDATE_LIMIT_EXCEEDED_REASON
+        else:
+            iteration_count = candidate_count
+    actual_method = EQUAL_WEIGHT_FALLBACK_METHOD if fallback_used else objective
+
     if missing_covariances or non_finite_covariances:
         # Fail closed: an incomplete or non-finite covariance matrix must never
         # be silently treated as zero to produce a plausible-looking variance.
         covariance_condition = (
             "missing_covariance" if missing_covariances else "non_finite_covariance"
         )
-        optimizer_status = "blocked_missing_covariance"
+        solver_status = "blocked_missing_covariance"
         portfolio_variance = float("nan")
         objective_value = float("nan")
     else:
@@ -272,21 +370,79 @@ def build_optimizer_diagnostics(
         covariance_condition = (
             "zero_variance" if all(value <= 0 for value in diagonal_values) else "ok"
         )
-        optimizer_status = "feasible" if not violations else "constraint_violation"
         portfolio_variance = _portfolio_variance(ordered, ordered_weights, covariances)
         objective_value = _objective_value(objective, ordered, ordered_weights, covariances)
+        if fallback_used:
+            solver_status = CANDIDATE_LIMIT_EXCEEDED_REASON
+        elif violations:
+            solver_status = "constraint_violation"
+        else:
+            solver_status = "feasible"
+    convergence_status = (
+        "converged"
+        if solver_status in {"feasible", CANDIDATE_LIMIT_EXCEEDED_REASON}
+        else "not_converged"
+    )
+    production_eligible = (
+        mode == PRODUCTION_SOLVER_MODE
+        and not fallback_used
+        and missing_covariances == 0
+        and non_finite_covariances == 0
+        and not violations
+    )
     diagnostics = OptimizerDiagnostics(
         optimizer_type=optimizer_type,
-        optimizer_status=optimizer_status,
+        optimizer_status=solver_status,
+        requested_method=objective,
+        actual_method=actual_method,
+        solver_name=optimizer_type,
+        solver_version=OPTIMIZER_ALGORITHM_VERSION,
+        solver_status=solver_status,
+        convergence_status=convergence_status,
         objective_value=objective_value,
         expected_return=expected_return,
         portfolio_variance=portfolio_variance,
         constraint_violations=tuple(violations),
+        constraint_residuals=_constraint_residuals(weights, constraints),
+        bound_activity=_bound_activity(weights, constraints),
         covariance_condition=covariance_condition,
         missing_covariance_count=missing_covariances,
+        non_finite_covariance_count=non_finite_covariances,
         input_listing_count=len(ordered),
+        iteration_count=iteration_count,
+        numeric_tolerances={
+            "weight_sum_tolerance": WEIGHT_SUM_TOLERANCE,
+            "grid_step": grid_step if grid_step is not None else 0.0,
+        },
+        risk_model_id=risk_model_id,
+        fallback_used=fallback_used,
+        fallback_reason=fallback_reason,
+        production_eligible=production_eligible,
     )
     return diagnostics.as_dict()
+
+
+def _constraint_residuals(
+    weights: Mapping[str, float], constraints: PortfolioConstraints
+) -> tuple[float, ...]:
+    return tuple(
+        max(0.0, constraints.min_weight - float(weights[isin]))
+        + max(0.0, float(weights[isin]) - constraints.max_weight)
+        for isin in sorted(weights)
+    )
+
+
+def _bound_activity(
+    weights: Mapping[str, float], constraints: PortfolioConstraints, *, tolerance: float = 1e-9
+) -> tuple[str, ...]:
+    activity: list[str] = []
+    for isin in sorted(weights):
+        value = float(weights[isin])
+        if isclose(value, constraints.min_weight, rel_tol=0.0, abs_tol=tolerance):
+            activity.append(f"{isin}:min_weight")
+        if isclose(value, constraints.max_weight, rel_tol=0.0, abs_tol=tolerance):
+            activity.append(f"{isin}:max_weight")
+    return tuple(activity)
 
 
 def build_target_weight_rows(
@@ -353,6 +509,7 @@ def write_optimized_weights(
         weights,
         objective=objective,
         constraints=constraints,
+        grid_step=grid_step,
     )
     diagnostics.update(
         {
@@ -574,6 +731,7 @@ def write_maximum_diversification(
             weights,
             objective=MAXIMUM_DIVERSIFICATION_OBJECTIVE,
             constraints=constraints,
+            grid_step=grid_step,
         ),
     )
     metric_rows = build_diversification_metric_rows(
@@ -729,14 +887,9 @@ def _objective_value(
 def _candidate_weights(
     listings: Sequence[ListingKey], constraints: PortfolioConstraints, *, grid_step: float
 ) -> list[tuple[float, ...]]:
-    if not 0 < grid_step <= 1:
-        raise ValueError("grid_step must be in (0, 1]")
-    steps = round(1.0 / grid_step)
-    if not isclose(steps * grid_step, 1.0, rel_tol=0.0, abs_tol=1e-9):
-        raise ValueError("grid_step must divide 1")
-    exact_candidate_count = comb(len(listings) + steps - 1, steps)
-    if exact_candidate_count > MAX_EXACT_WEIGHT_CANDIDATES:
+    if exact_candidate_count(len(listings), grid_step) > MAX_EXACT_WEIGHT_CANDIDATES:
         return _fallback_candidate_weights(listings, constraints)
+    steps = round(1.0 / grid_step)
     candidates: list[tuple[float, ...]] = []
     for integers in _weight_integer_partitions(len(listings), steps):
         weights = tuple(round(item * grid_step, 12) for item in integers)

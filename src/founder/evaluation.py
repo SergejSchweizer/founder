@@ -12,9 +12,9 @@ from founder.gold import covariance
 from founder.paths import LakePaths
 from founder.portfolio import (
     PortfolioConstraints,
-    equal_weight_seed,
     optimize_portfolio,
     require_complete_covariance,
+    resolve_actual_optimizer_method,
 )
 from founder.return_quality import MIN_HISTORY_LONG, MIN_HISTORY_MEDIUM, MIN_HISTORY_SHORT
 from founder.table_io import JsonRow, read_rows, write_rows
@@ -389,31 +389,6 @@ def write_portfolio_evaluation(
     return portfolio_returns, drawdowns, metrics
 
 
-def _actual_optimizer_method(
-    listings: Sequence[Mapping[str, Any]],
-    constraints: PortfolioConstraints,
-    objective: str,
-    weights: Mapping[str, float],
-) -> str:
-    """Detect a silent equal-weight candidate-limit fallback (see `_fallback_candidate_weights`).
-
-    The deterministic baseline optimizer falls back to a single equal-weight
-    candidate when the exact grid search would be too large. That fallback
-    must never be reported as if the requested objective actually ran.
-    """
-    if objective == "equal_weight":
-        return objective
-    isins = sorted({str(row["isin"]) for row in listings})
-    try:
-        fallback_weights = equal_weight_seed(isins, constraints)
-    except ValueError:
-        return objective
-    matches_fallback = all(
-        abs(float(weights[isin]) - fallback_weights[isin]) < 1e-9 for isin in isins
-    )
-    return "equal_weight_fallback" if matches_fallback else objective
-
-
 def build_walk_forward_backtest(
     matrix_rows: Sequence[Mapping[str, Any]],
     *,
@@ -472,8 +447,8 @@ def build_walk_forward_backtest(
             constraints=constraints,
             grid_step=grid_step,
         )
-        actual_optimizer_method = _actual_optimizer_method(
-            listings, constraints, objective, weights
+        actual_optimizer_method = resolve_actual_optimizer_method(
+            objective, len(listings), grid_step
         )
         split_id = f"split-{split_index:03d}"
         portfolio_returns = build_portfolio_returns(
