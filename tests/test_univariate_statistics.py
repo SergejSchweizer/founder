@@ -1,3 +1,5 @@
+from datetime import date as _date
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -182,6 +184,41 @@ def test_univariate_statistics_ignore_empty_and_zero_distribution_events() -> No
     assert row["distribution_frequency"] == "unknown"
     assert row["last_distribution_date"] == "2026-02-15"
     assert row["distribution_observation_count"] == 1
+
+
+def test_univariate_statistics_quarantines_invalid_prices_instead_of_zero_return() -> None:
+    quotes = [
+        _quote("2026-01-01", 100.0),
+        _quote("2026-01-02", 0.0),
+        _quote("2026-01-02", -5.0),
+        _quote("2026-01-03", 110.0),
+    ]
+
+    returns = build_quote_returns(quotes)
+    row = build_univariate_statistics(quotes)[0]
+
+    assert [item["date"] for item in returns] == ["2026-01-03"]
+    assert returns[0]["return"] != 0.0
+    assert row["quarantined_price_count"] == 2
+    assert row["non_positive_price_detected"] is True
+    assert row["duplicate_date_detected"] is True
+    assert row["production_eligible"] is False
+    assert row["data_quality_reason"] == "non_positive_price"
+
+
+def test_univariate_statistics_are_production_eligible_with_enough_clean_history() -> None:
+    start = _date(2020, 1, 1)
+    quotes = [
+        _quote((start + timedelta(days=index)).isoformat(), 100.0 + index) for index in range(253)
+    ]
+
+    row = build_univariate_statistics(quotes)[0]
+
+    assert row["return_observation_count"] == 252
+    assert row["meets_min_history_252"] is True
+    assert row["meets_min_history_504"] is False
+    assert row["production_eligible"] is True
+    assert row["data_quality_reason"] == "ok"
 
 
 def test_univariate_statistics_parallel_matches_serial() -> None:

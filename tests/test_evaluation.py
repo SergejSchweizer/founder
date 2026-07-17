@@ -1,3 +1,4 @@
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -76,10 +77,31 @@ def test_asset_metrics_handle_zero_variance_and_downside_returns() -> None:
     assert metrics[0]["confidence_level"] == 0.95
     assert metrics[0]["cvar"] == pytest.approx(-0.01)
     assert metrics[0]["tail_observation_count"] == 2
+    assert metrics[0]["meets_min_history_252"] is False
+    assert metrics[0]["meets_min_history_504"] is False
+    assert metrics[0]["meets_min_history_756"] is False
+    assert metrics[0]["production_eligible"] is False
     assert metrics[1]["downside_deviation"] > 0.0
     assert metrics[1]["sortino_ratio"] > 0.0
     assert metrics[1]["var"] == pytest.approx(0.02)
     assert metrics[1]["cvar"] == pytest.approx(0.02)
+
+
+def test_asset_metrics_report_production_eligibility_by_minimum_history() -> None:
+    start = date(2020, 1, 1)
+    rows = [
+        _return_row("IE1", "XETRA", "AAA", (start + timedelta(days=day)).isoformat(), 0.001)
+        for day in range(505)
+    ]
+    matrix = build_return_matrix(rows, "eval-1")
+
+    metrics = build_asset_metrics(matrix, "eval-1")
+
+    assert metrics[0]["observation_count"] == 505
+    assert metrics[0]["meets_min_history_252"] is True
+    assert metrics[0]["meets_min_history_504"] is True
+    assert metrics[0]["meets_min_history_756"] is False
+    assert metrics[0]["production_eligible"] is True
 
 
 def test_asset_metrics_include_tail_risk_for_every_isin() -> None:
@@ -164,6 +186,60 @@ def test_portfolio_returns_align_weights_and_cumulative_wealth() -> None:
     assert rows[0]["cumulative_wealth"] == pytest.approx(1.035)
     assert rows[1]["return"] == pytest.approx(-0.025)
     assert rows[1]["cumulative_wealth"] == pytest.approx(1.035 * 0.975)
+
+
+def test_portfolio_returns_compound_simple_returns_not_log_returns() -> None:
+    """Wealth simulation must weight and compound simple returns, not log returns.
+
+    A single-asset portfolio makes this unambiguous: the log return of a large
+    price move differs materially from its simple return, so using the wrong
+    field would produce a different, wrong cumulative wealth.
+    """
+    matrix = [
+        {
+            "evaluation_id": "eval-1",
+            "date": "2026-07-11",
+            "isin": "IE1",
+            "exchange": "XETRA",
+            "code": "AAA",
+            "return": 0.4054651081,  # log(1.5)
+            "simple_return": 0.5,
+        }
+    ]
+
+    rows = build_portfolio_returns(
+        matrix,
+        evaluation_id="eval-1",
+        portfolio_id="single-asset",
+        weights={"IE1": 1.0},
+    )
+
+    assert rows[0]["return"] == pytest.approx(0.5)
+    assert rows[0]["cumulative_wealth"] == pytest.approx(1.5)
+
+
+def test_portfolio_returns_fall_back_to_log_return_field_without_simple_return() -> None:
+    """Matrix rows built before simple_return existed keep their prior numeric behavior."""
+    matrix = [
+        {
+            "evaluation_id": "eval-1",
+            "date": "2026-07-11",
+            "isin": "IE1",
+            "exchange": "XETRA",
+            "code": "AAA",
+            "return": 0.05,
+        }
+    ]
+
+    rows = build_portfolio_returns(
+        matrix,
+        evaluation_id="eval-1",
+        portfolio_id="single-asset",
+        weights={"IE1": 1.0},
+    )
+
+    assert rows[0]["return"] == pytest.approx(0.05)
+    assert rows[0]["cumulative_wealth"] == pytest.approx(1.05)
 
 
 def test_portfolio_weights_are_cash_free_and_match_matrix_isins() -> None:

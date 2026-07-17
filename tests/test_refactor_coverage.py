@@ -153,11 +153,13 @@ def test_univariate_statistics_cover_invalid_prices_and_single_quote() -> None:
     )
     single = build_univariate_statistics([_silver_quote("IE2", "AS", "BBB", "2026-01-01", 100.0)])
 
-    assert invalid_returns[0]["return"] == 0.0
+    assert invalid_returns == []
     assert single[0]["availability_reason"] == "insufficient_returns"
     assert single[0]["annualized_geometric_return"] == 0.0
     assert single[0]["var"] == 0.0
     assert single[0]["positive_day_ratio"] == 0.0
+    assert single[0]["production_eligible"] is False
+    assert single[0]["data_quality_reason"] == "insufficient_history"
 
 
 def test_univariate_statistics_cover_drawdown_and_flat_trend_branches() -> None:
