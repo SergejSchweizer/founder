@@ -26,7 +26,12 @@ from founder.fetch_all_isins import fetch_all_isins, write_all_isins
 from founder.http import EodhdClient
 from founder.logging import get_logger, log_event
 from founder.metadata_filter import run_metadata_filter
+from founder.multivariate_statistics import (
+    MultivariateStatisticsConfig,
+    write_multivariate_statistics,
+)
 from founder.paths import LakePaths
+from founder.portfolio import PortfolioConstraints
 from founder.run_locks import module_run_lock
 from founder.search import (
     approve_universe,
@@ -381,6 +386,65 @@ def run_bivariate_statistics_workflow(
             "return_rows": len(returns),
             "selection_id": resolved_selection_id,
         }
+
+
+def run_multivariate_statistics_workflow(
+    *,
+    root: Path,
+    selection_id: str | None = None,
+    evaluation_id: str = "multivariate-latest",
+    portfolio_id_prefix: str = "multivariate",
+    confidence_level: float = 0.95,
+    grid_step: float = 0.1,
+    train_window: int = 2,
+    test_window: int = 1,
+    rebalance_schedule: str = "monthly",
+    transaction_cost_rate: float = 0.0,
+    drift_threshold: float | None = None,
+    min_weight: float = 0.0,
+    max_weight: float = 1.0,
+    concurrency: int = 2,
+) -> dict[str, Any]:
+    """Build multivariate portfolio statistics from a Univariate Filter selection."""
+    paths = LakePaths(root=root)
+    with module_run_lock(paths, "multivariate-statistics"):
+        resolved_selection_id = selection_id or _current_univariate_filter_selection_id(paths)
+        log_event(
+            LOGGER,
+            logging.INFO,
+            module="multivariate-statistics",
+            event="started",
+            fields={"root": root, "selection_id": resolved_selection_id},
+        )
+        summary = write_multivariate_statistics(
+            paths,
+            selection_rows(paths, resolved_selection_id),
+            config=MultivariateStatisticsConfig(
+                evaluation_id=evaluation_id,
+                portfolio_id_prefix=portfolio_id_prefix,
+                confidence_level=confidence_level,
+                grid_step=grid_step,
+                train_window=train_window,
+                test_window=test_window,
+                rebalance_schedule=rebalance_schedule,
+                transaction_cost_rate=transaction_cost_rate,
+                drift_threshold=drift_threshold,
+                constraints=PortfolioConstraints(min_weight=min_weight, max_weight=max_weight),
+                concurrency=concurrency,
+            ),
+        )
+        log_event(
+            LOGGER,
+            logging.INFO,
+            module="multivariate-statistics",
+            event="completed",
+            fields={
+                "evaluation_id": evaluation_id,
+                "portfolio_count": summary["portfolio_count"],
+                "selection_id": resolved_selection_id,
+            },
+        )
+        return {"selection_id": resolved_selection_id, **summary}
 
 
 def _filter_quotes_to_selection(

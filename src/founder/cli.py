@@ -16,6 +16,7 @@ from founder.workflows import (
     run_fetch_all_isins_workflow,
     run_fetch_all_quotes_workflow,
     run_metadata_filter_workflow,
+    run_multivariate_statistics_workflow,
     run_search_workflow,
     run_univariate_filter_workflow,
     run_univariate_statistics_workflow,
@@ -234,6 +235,90 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         help="Worker process count. Defaults to all CPU cores visible to the system.",
     )
+    multivariate = subparsers.add_parser(
+        "multivariate-statistics",
+        help="Build portfolio statistics from the latest univariate-filter selection.",
+    )
+    multivariate.add_argument(
+        "--debug",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Write verbose DEBUG logs.",
+    )
+    multivariate.add_argument("--root", default=str(DEFAULT_ROOT), help="Lake root to build from.")
+    multivariate.add_argument(
+        "--selection-id",
+        help="Univariate-filter selection id. Defaults to the latest univariate-filter selection.",
+    )
+    multivariate.add_argument(
+        "--evaluation-id",
+        default="multivariate-latest",
+        help="Stable evaluation id for generated portfolio artifacts.",
+    )
+    multivariate.add_argument(
+        "--portfolio-id-prefix",
+        default="multivariate",
+        help="Prefix for generated portfolio ids.",
+    )
+    multivariate.add_argument(
+        "--confidence-level",
+        type=float,
+        default=0.95,
+        help="Tail-risk confidence level for asset and portfolio metrics.",
+    )
+    multivariate.add_argument(
+        "--grid-step",
+        type=float,
+        default=0.1,
+        help="Deterministic optimizer grid step. Defaults to 0.1.",
+    )
+    multivariate.add_argument(
+        "--train-window",
+        type=int,
+        default=2,
+        help="Walk-forward training window in common return rows.",
+    )
+    multivariate.add_argument(
+        "--test-window",
+        type=int,
+        default=1,
+        help="Walk-forward test window in common return rows.",
+    )
+    multivariate.add_argument(
+        "--rebalance-schedule",
+        choices=("monthly", "quarterly", "annual", "threshold"),
+        default="monthly",
+        help="Rebalance simulation schedule.",
+    )
+    multivariate.add_argument(
+        "--transaction-cost-rate",
+        type=float,
+        default=0.0,
+        help="Transaction cost rate used in rebalance simulation.",
+    )
+    multivariate.add_argument(
+        "--drift-threshold",
+        type=float,
+        help="Optional drift threshold for threshold rebalancing.",
+    )
+    multivariate.add_argument(
+        "--min-weight",
+        type=float,
+        default=0.0,
+        help="Minimum instrument weight for generated portfolios.",
+    )
+    multivariate.add_argument(
+        "--max-weight",
+        type=float,
+        default=1.0,
+        help="Maximum instrument weight for generated portfolios.",
+    )
+    multivariate.add_argument(
+        "--concurrency",
+        type=int,
+        default=2,
+        help="Worker process count for Gold input generation. Defaults to 2.",
+    )
     return parser
 
 
@@ -303,6 +388,23 @@ def main(argv: Sequence[str] | None = None) -> None:
         summary = run_bivariate_statistics_workflow(
             root=Path(args.root),
             selection_id=args.selection_id,
+            concurrency=args.concurrency,
+        )
+    elif args.command == "multivariate-statistics":
+        summary = run_multivariate_statistics_workflow(
+            root=Path(args.root),
+            selection_id=args.selection_id,
+            evaluation_id=args.evaluation_id,
+            portfolio_id_prefix=args.portfolio_id_prefix,
+            confidence_level=args.confidence_level,
+            grid_step=args.grid_step,
+            train_window=args.train_window,
+            test_window=args.test_window,
+            rebalance_schedule=args.rebalance_schedule,
+            transaction_cost_rate=args.transaction_cost_rate,
+            drift_threshold=args.drift_threshold,
+            min_weight=args.min_weight,
+            max_weight=args.max_weight,
             concurrency=args.concurrency,
         )
     else:

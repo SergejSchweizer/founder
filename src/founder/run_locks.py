@@ -18,6 +18,7 @@ ModuleName = Literal[
     "fetch-all-isins",
     "fetch-all-quotes",
     "metadata-filter",
+    "multivariate-statistics",
     "search",
     "univariate-filter",
     "univariate-statistics",
