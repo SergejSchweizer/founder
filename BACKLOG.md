@@ -886,7 +886,7 @@ Priority policy: This stack translates `GOALS.md` into production portfolio deci
 
 Branch: `fix/production-return-quality-gate`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/83.
 
 Priority: P0 correctness foundation.
 
