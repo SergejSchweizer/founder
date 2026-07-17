@@ -81,7 +81,7 @@ Repeated help and import checks do not create or mutate lake, log, configuration
 
 Branch: `fix/walk-forward-return-semantics`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/93.
 
 Priority: P0 quantitative correctness.
 
