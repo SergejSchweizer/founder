@@ -87,7 +87,7 @@ class MultivariateStatisticsConfig:
     constraints: PortfolioConstraints = PortfolioConstraints(max_weight=1.0)
     objectives: tuple[str, ...] = DEFAULT_OBJECTIVES
     frontier_target_returns: tuple[float, ...] = (-0.01, 0.0, 0.01)
-    concurrency: int = 2
+    concurrency: int | None = None
     selection_id: str | None = None
     selection_source_module: str = "univariate_filter"
     use_selection_statistics_cache: bool = False
@@ -587,7 +587,7 @@ class ProductionMultivariateConfig:
     constraints: PortfolioConstraints = PortfolioConstraints(max_weight=0.25)
     risk_model_estimator: str = "ledoit_wolf"
     profile_names: tuple[str, ...] = PROFILE_NAMES
-    concurrency: int = 2
+    concurrency: int | None = None
 
 
 _PROFILE_BUILDERS: dict[str, Any] = {

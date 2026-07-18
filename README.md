@@ -448,6 +448,14 @@ Use `--selection-id <selection_id>` only when intentionally rebuilding a specifi
 
 Bivariate Statistics parallelizes pair work across all CPU cores visible to the system by default. Use `--concurrency <workers>` to cap worker processes.
 
+`multivariate_statistics` computes portfolio-level analytics for the latest persisted `univariate_filter` selection by default. It filters Silver quotes to the selected listings, builds selected Gold risk inputs, writes an aligned return matrix and asset metrics, and runs Equal Weight, Minimum Variance, Maximum Sharpe, Risk Parity, HRP, Maximum Diversification, efficient-frontier, walk-forward, rebalance, and tail-risk outputs:
+
+```bash
+uv run founder multivariate-statistics
+```
+
+Multivariate Statistics parallelizes the selected Gold input build across all CPU cores visible to the system by default, and cache mode also passes the same worker count to univariate and bivariate cache refreshes. Use `--concurrency <workers>` to cap worker processes, for example `--concurrency 1` for deterministic single-process debugging. Use `--use-selection-statistics-cache` to consume reusable selection statistics views and reuse unchanged portfolio runs.
+
 Module outputs are intentionally reusable:
 
 ```text

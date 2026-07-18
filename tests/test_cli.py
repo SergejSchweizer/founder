@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from founder.cli import main
+from founder.cli import build_parser, main
 from founder.fetch_all_quotes import main as fetch_all_quotes_main
 from founder.paths import LakePaths
 from founder.table_io import read_json, read_rows, write_json, write_rows
@@ -45,6 +45,12 @@ def test_cli_prints_project_name(capsys: pytest.CaptureFixture[str]) -> None:
 
     output = capsys.readouterr()
     assert output.out == "founder\n"
+
+
+def test_multivariate_statistics_concurrency_defaults_to_all_core_mode() -> None:
+    args = build_parser().parse_args(["multivariate-statistics"])
+
+    assert args.concurrency is None
 
 
 def test_cli_runs_search_module(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

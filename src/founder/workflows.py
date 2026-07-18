@@ -404,7 +404,7 @@ def run_multivariate_statistics_workflow(
     drift_threshold: float | None = None,
     min_weight: float = 0.0,
     max_weight: float = 1.0,
-    concurrency: int = 2,
+    concurrency: int | None = None,
     use_selection_statistics_cache: bool = False,
 ) -> dict[str, Any]:
     """Build multivariate portfolio statistics from a Univariate Filter selection."""

@@ -13,14 +13,13 @@ from founder.table_io import JsonRow
 ListingKey = tuple[str, str, str]
 ReturnsByListing = dict[ListingKey, dict[str, float]]
 
-# Explicit resource policy for pairwise (bivariate) computation. These are
-# deliberately conservative for a NAS-hosted, few-core deployment: a universe
+# Explicit resource policy for pairwise (bivariate) computation. A universe
 # whose theoretical unordered-pair count exceeds DEFAULT_MAX_PAIR_COUNT must be
 # rejected before pairs are materialized or worker tasks are submitted, unless
-# a caller explicitly raises the limit. Default worker count is capped rather
-# than scaling with every visible CPU core.
+# a caller explicitly raises the limit. Default worker count uses every visible
+# CPU core for statistics jobs; callers can still pass --concurrency to cap it.
 DEFAULT_MAX_PAIR_COUNT = 500_000
-DEFAULT_MAX_WORKERS = 4
+DEFAULT_MAX_WORKERS = max(1, os.cpu_count() or 1)
 DEFAULT_PAIR_CHUNK_SIZE = 5_000
 DEFAULT_BUCKET_COUNT = 128
 DEFAULT_BYTES_PER_PAIR = 200
@@ -46,7 +45,7 @@ class PairPlan:
 
 
 def resolve_worker_count(concurrency: int | None, *, max_workers: int = DEFAULT_MAX_WORKERS) -> int:
-    """Resolve a worker count capped by an explicit policy, not all visible cores."""
+    """Resolve worker count from explicit concurrency or all visible cores."""
     if concurrency is not None:
         return max(1, concurrency)
     return max(1, min(max_workers, os.cpu_count() or 1))
