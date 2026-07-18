@@ -1164,6 +1164,8 @@ Determinism: Scenario ids include scenario policy, seed, input artifact ids, can
 
 Idempotency: Re-running unchanged scenario analysis resolves to the same scenario ids and results and resumes only missing scenarios after interruption.
 
+Progress note: `founder.stress` is implemented and merged: `historical_stress_scenario` (replays the worst-drawdown window of a requested length detected deterministically within the caller's own data -- never a hardcoded or asserted crash date), `distribution_cut_scenario` (a multiplicative return shock on selected ISINs), `block_bootstrap_scenarios` (seeded contiguous-block resampling, no numpy/scipy), `correlation_convergence_scenario` and `covariance_perturbation_scenario` (covariance-only scenarios reporting a hand-implemented parametric Gaussian VaR/CVaR since they have no return series to replay), and `build_sensitivity_summary` (median/worst-case aggregation across scenario results for one candidate). Scenario ids are deterministic via `stable_contract_id`. Alternate training windows and rebalance schedules are already covered by the existing `founder.evaluation.build_walk_forward_backtest`/`founder.scorecard` rolling/expanding window support and are not re-implemented here. Scenario-result persistence to a dedicated lake dataset (rather than returning in-memory dataclasses/rows) remains a documented follow-up once a concrete caller (PR66's recommendation report) needs it.
+
 ### PR66. Explainable Recommendation Report
 
 Branch: `feat/recommendation-explanation-report`.
