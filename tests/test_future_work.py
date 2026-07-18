@@ -668,7 +668,7 @@ def test_docs_refresh_report_tracks_review_lines(tmp_path: Path) -> None:
         "DECISIONS.md",
         "BACKLOG.md",
         "AGENTS.md",
-        "docs/lake_contracts.md",
+        "CONTRACTS.md",
     ):
         (tmp_path / name).write_text("# Doc\n\nLast reviewed: 2026-07-12\n", encoding="utf-8")
     (tmp_path / "RISKS.md").write_text("# Risks\n", encoding="utf-8")

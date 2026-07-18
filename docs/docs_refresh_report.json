@@ -11,11 +11,15 @@
     },
     "BACKLOG.md": {
       "exists": true,
-      "review": "Last reviewed: 2026-07-14"
+      "review": "Last reviewed: 2026-07-17"
+    },
+    "CONTRACTS.md": {
+      "exists": true,
+      "review": "Last reviewed: 2026-07-13"
     },
     "DECISIONS.md": {
       "exists": true,
-      "review": "Last reviewed: 2026-07-14"
+      "review": "Last reviewed: 2026-07-13"
     },
     "README.md": {
       "exists": true,
@@ -24,10 +28,6 @@
     "RISKS.md": {
       "exists": true,
       "review": "Last reviewed: 2026-07-14"
-    },
-    "docs/lake_contracts.md": {
-      "exists": true,
-      "review": "Last reviewed: 2026-07-13"
     }
   }
 }

@@ -29,7 +29,7 @@ New contributors should read the documentation in this order:
 
 1. Start here to understand the goal, data source, current facts, and local commands.
 2. Read [ARCHITECTURE.md](ARCHITECTURE.md) for the module diagram and one-paragraph purpose of each package module.
-3. Read [docs/lake_contracts.md](docs/lake_contracts.md) before changing paths, schemas, or storage formats.
+3. Read [CONTRACTS.md](CONTRACTS.md) before changing paths, schemas, or storage formats.
 4. Check [RISKS.md](RISKS.md), [DECISIONS.md](DECISIONS.md), and [BACKLOG.md](BACKLOG.md) before opening a PR-sized change.
 5. Follow [AGENTS.md](AGENTS.md) for workflow rules, PR status tracking, and merge-gate policy.
 
@@ -162,7 +162,7 @@ The current refactor target keeps portfolio optimization downstream from the ISI
 ## Documentation Map
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) explains how modules connect and where responsibilities live.
-- [docs/lake_contracts.md](docs/lake_contracts.md) defines lake layers and table contracts.
+- [CONTRACTS.md](CONTRACTS.md) defines lake layers and table contracts.
 - [DECISIONS.md](DECISIONS.md) records why durable technical choices were made.
 - [RISKS.md](RISKS.md) tracks active project risks and mitigations.
 - [BACKLOG.md](BACKLOG.md) tracks PR-sized work and implementation status.
