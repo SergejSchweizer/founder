@@ -33,6 +33,7 @@ from founder.portfolio_parts.solvers import (
     solve_equal_risk_contribution,
     solve_minimum_variance,
 )
+from founder.risk_model import estimate_risk_model
 from founder.table_io import JsonRow, read_rows, write_rows
 
 ListingKey = tuple[str, str, str]
@@ -283,7 +284,7 @@ def optimize_portfolio(
 ) -> dict[str, float]:
     if mode not in SOLVER_MODES:
         raise ValueError(f"unknown optimizer mode: {mode}")
-    ordered = _listing_keys(listings)
+    ordered = listing_keys(listings)
     if objective == "equal_weight":
         return equal_weight_seed([isin for isin, _, _ in ordered], constraints)
 
@@ -293,7 +294,7 @@ def optimize_portfolio(
         raise ValueError("target_return is required")
     target_value = 0.0 if target_return is None else target_return
 
-    covariances = _covariance_map(covariance_rows)
+    covariances = covariance_map(covariance_rows)
     require_complete_covariance(ordered, covariances)
 
     if mode == PRODUCTION_SOLVER_MODE and objective in SOLVER_BACKED_OBJECTIVES:
@@ -325,7 +326,7 @@ def optimize_portfolio(
     if objective == "minimum_variance":
         best = min(
             feasible,
-            key=lambda weights: (_portfolio_variance(ordered, weights, covariances), weights),
+            key=lambda weights: (portfolio_variance(ordered, weights, covariances), weights),
         )
     elif objective == "maximum_sharpe":
         best = max(
@@ -339,7 +340,7 @@ def optimize_portfolio(
         best = min(
             feasible,
             key=lambda weights: (
-                _portfolio_variance(ordered, weights, covariances),
+                portfolio_variance(ordered, weights, covariances),
                 abs(_portfolio_return(ordered, weights, expected_returns) - target_value),
                 weights,
             ),
@@ -357,7 +358,7 @@ def optimize_portfolio(
             feasible,
             key=lambda weights: (
                 _risk_parity_residual(ordered, weights, covariances),
-                _portfolio_variance(ordered, weights, covariances),
+                portfolio_variance(ordered, weights, covariances),
                 weights,
             ),
         )
@@ -381,11 +382,11 @@ def build_optimizer_diagnostics(
 ) -> JsonRow:
     if mode not in SOLVER_MODES:
         raise ValueError(f"unknown optimizer mode: {mode}")
-    ordered = _listing_keys(listings)
-    covariances = _covariance_map(covariance_rows)
+    ordered = listing_keys(listings)
+    covariances = covariance_map(covariance_rows)
     ordered_weights = tuple(float(weights[isin]) for isin, _, _ in ordered)
     expected_return = _portfolio_return(ordered, ordered_weights, expected_returns)
-    violations = _constraint_violations(weights, constraints)
+    violations = constraint_violations(weights, constraints)
     missing_covariances, non_finite_covariances = _covariance_completeness(ordered, covariances)
     solver_backed = mode == PRODUCTION_SOLVER_MODE and objective in SOLVER_BACKED_OBJECTIVES
 
@@ -425,14 +426,14 @@ def build_optimizer_diagnostics(
             "missing_covariance" if missing_covariances else "non_finite_covariance"
         )
         solver_status = "blocked_missing_covariance"
-        portfolio_variance = float("nan")
+        portfolio_variance_value = float("nan")
         objective_value = float("nan")
     else:
         diagonal_values = [covariances[(listing, listing)] for listing in ordered]
         covariance_condition = (
             "zero_variance" if all(value <= 0 for value in diagonal_values) else "ok"
         )
-        portfolio_variance = _portfolio_variance(ordered, ordered_weights, covariances)
+        portfolio_variance_value = portfolio_variance(ordered, ordered_weights, covariances)
         objective_value = _objective_value(objective, ordered, ordered_weights, covariances)
         if solver_backed_matches_weights and not solver_converged:
             solver_status = "solver_not_converged"
@@ -468,7 +469,7 @@ def build_optimizer_diagnostics(
         convergence_status=convergence_status,
         objective_value=objective_value,
         expected_return=expected_return,
-        portfolio_variance=portfolio_variance,
+        portfolio_variance=portfolio_variance_value,
         constraint_violations=tuple(violations),
         constraint_residuals=_constraint_residuals(weights, constraints),
         bound_activity=_bound_activity(weights, constraints),
@@ -554,8 +555,8 @@ def write_optimized_weights(
     risk_budget_tolerance: float = 1e-6,
 ) -> list[JsonRow]:
     matrix_rows = read_rows(paths.gold_return_matrix(evaluation_id))
-    listings = _listing_rows(matrix_rows)
-    covariance_rows = _read_covariances(paths, listings)
+    listings = listing_rows(matrix_rows)
+    covariance_rows = read_covariances(paths, listings)
     expected_returns = _expected_returns(matrix_rows)
     weights = optimize_portfolio(
         listings,
@@ -567,7 +568,7 @@ def write_optimized_weights(
         target_return=target_return,
         grid_step=grid_step,
     )
-    ordered = _listing_keys(listings)
+    ordered = listing_keys(listings)
     ordered_weights = tuple(weights[isin] for isin, _, _ in ordered)
     diagnostics: JsonRow = build_optimizer_diagnostics(
         listings,
@@ -660,8 +661,8 @@ def hierarchical_risk_parity_weights(
     midpoint-split baseline this replaces; that baseline must never be
     labeled `hierarchical_risk_parity` in a production-facing artifact.
     """
-    ordered = _listing_keys(listings)
-    covariances = _covariance_map(covariance_rows)
+    ordered = listing_keys(listings)
+    covariances = covariance_map(covariance_rows)
     require_complete_covariance(ordered, covariances)
     order, matrix, _linkage = _hrp_clustering(ordered, covariances)
     raw_index_weights, _splits = recursive_bisection(order, matrix)
@@ -686,8 +687,8 @@ def hierarchical_risk_parity_baseline_weights(
     reported under the `hierarchical_risk_parity_baseline` label, never as
     `hierarchical_risk_parity`.
     """
-    ordered = _listing_keys(listings)
-    covariances = _covariance_map(covariance_rows)
+    ordered = listing_keys(listings)
+    covariances = covariance_map(covariance_rows)
     require_complete_covariance(ordered, covariances)
     raw_weights = _recursive_hrp_baseline_weights(ordered, covariances)
     capped = {
@@ -709,8 +710,8 @@ def build_hrp_cluster_rows(
     evaluation_id: str,
     portfolio_id: str,
 ) -> list[JsonRow]:
-    ordered = _listing_keys(listings)
-    covariances = _covariance_map(covariance_rows)
+    ordered = listing_keys(listings)
+    covariances = covariance_map(covariance_rows)
     require_complete_covariance(ordered, covariances)
     order, matrix, _linkage = _hrp_clustering(ordered, covariances)
     _weights, splits = recursive_bisection(order, matrix)
@@ -743,8 +744,8 @@ def build_hrp_linkage_rows(
     portfolio_id: str,
 ) -> list[JsonRow]:
     """Persist the single-linkage dendrogram itself (the merge history)."""
-    ordered = _listing_keys(listings)
-    covariances = _covariance_map(covariance_rows)
+    ordered = listing_keys(listings)
+    covariances = covariance_map(covariance_rows)
     require_complete_covariance(ordered, covariances)
     _order, _matrix, linkage = _hrp_clustering(ordered, covariances)
     leaf_count = len(ordered)
@@ -777,8 +778,8 @@ def write_hierarchical_risk_parity(
     constraints: PortfolioConstraints,
 ) -> tuple[list[JsonRow], list[JsonRow], list[JsonRow]]:
     matrix_rows = read_rows(paths.gold_return_matrix(evaluation_id))
-    listings = _listing_rows(matrix_rows)
-    covariance_rows = _read_covariances(paths, listings)
+    listings = listing_rows(matrix_rows)
+    covariance_rows = read_covariances(paths, listings)
     weights = hierarchical_risk_parity_weights(listings, covariance_rows, constraints)
     weight_rows = build_target_weight_rows(
         listings,
@@ -836,8 +837,8 @@ def write_hierarchical_risk_parity_baseline(
     `hierarchical_risk_parity` objective (see PR61 amendment).
     """
     matrix_rows = read_rows(paths.gold_return_matrix(evaluation_id))
-    listings = _listing_rows(matrix_rows)
-    covariance_rows = _read_covariances(paths, listings)
+    listings = listing_rows(matrix_rows)
+    covariance_rows = read_covariances(paths, listings)
     weights = hierarchical_risk_parity_baseline_weights(listings, covariance_rows, constraints)
     weight_rows = build_target_weight_rows(
         listings,
@@ -901,7 +902,7 @@ def minimum_cvar_weights(
     covariance matrix, so it is a standalone entry point rather than an
     `optimize_portfolio` objective.
     """
-    ordered = _listing_keys(listings)
+    ordered = listing_keys(listings)
     returns_matrix = _aligned_return_matrix(ordered, return_rows)
     if len(returns_matrix) < 2:
         raise ValueError("at least two common historical return observations are required")
@@ -935,10 +936,10 @@ def build_minimum_cvar_diagnostics(
     when the given weights numerically match its own output (see PR60's
     `build_optimizer_diagnostics` for the same weights-provenance safeguard).
     """
-    ordered = _listing_keys(listings)
+    ordered = listing_keys(listings)
     returns_matrix = _aligned_return_matrix(ordered, return_rows)
     ordered_weights = tuple(float(weights[isin]) for isin, _, _ in ordered)
-    violations = _constraint_violations(weights, constraints)
+    violations = constraint_violations(weights, constraints)
     outcome = (
         solve_minimum_cvar(
             returns_matrix,
@@ -1007,7 +1008,7 @@ def write_minimum_cvar_portfolio(
     confidence_level: float = DEFAULT_CVAR_CONFIDENCE_LEVEL,
 ) -> list[JsonRow]:
     matrix_rows = read_rows(paths.gold_return_matrix(evaluation_id))
-    listings = _listing_rows(matrix_rows)
+    listings = listing_rows(matrix_rows)
     weights = minimum_cvar_weights(
         listings, matrix_rows, constraints, confidence_level=confidence_level
     )
@@ -1034,6 +1035,55 @@ def write_minimum_cvar_portfolio(
     return weight_rows
 
 
+def shrinkage_minimum_variance_weights(
+    listings: Sequence[Mapping[str, Any]],
+    return_rows: Sequence[Mapping[str, Any]],
+    constraints: PortfolioConstraints,
+    *,
+    estimator: str = "ledoit_wolf",
+    max_iterations: int = 30_000,
+) -> dict[str, float]:
+    """Minimum Variance using a founder.risk_model shrinkage/EWMA covariance estimate.
+
+    Unlike `optimize_portfolio`'s solver-backed `minimum_variance` (which uses
+    the raw sample covariance from Gold pairwise covariance rows), this wires
+    `founder.risk_model`'s estimators through to the same PR60 projected-
+    gradient-descent solver -- the wiring noted as a follow-up in
+    docs/lake_contracts.md and used by PR63's Balanced ensemble. Shrinkage
+    covariance entries are typically much smaller in magnitude than raw Gold
+    covariance rows, so this uses a larger default iteration budget than the
+    solver's own default to reach the same absolute convergence tolerance.
+    """
+    ordered = listing_keys(listings)
+    risk_model = estimate_risk_model(return_rows, listings=ordered, estimator=estimator)
+    if not risk_model.diagnostics.production_eligible:
+        raise ValueError(
+            "risk_model_not_production_eligible: "
+            f"{', '.join(risk_model.diagnostics.availability_reasons)}"
+        )
+    covariances = {
+        (risk_model.listings[i], risk_model.listings[j]): risk_model.covariance[i][j]
+        for i in range(len(risk_model.listings))
+        for j in range(len(risk_model.listings))
+    }
+    outcome = solve_minimum_variance(
+        ordered,
+        covariances,
+        min_weight=constraints.min_weight,
+        max_weight=constraints.max_weight,
+        max_iterations=max_iterations,
+    )
+    if not outcome.converged:
+        raise ValueError(
+            f"solver_not_converged: the {PGD_SOLVER_NAME} solver did not converge for "
+            f"shrinkage minimum_variance within {outcome.iteration_count} iterations; no "
+            "production weights are produced for this request"
+        )
+    weights = {isin: weight for (isin, _, _), weight in zip(ordered, outcome.weights, strict=True)}
+    validate_weights(weights, constraints)
+    return weights
+
+
 def build_diversification_metric_rows(
     listings: Sequence[Mapping[str, Any]],
     covariance_rows: Sequence[Mapping[str, Any]],
@@ -1042,12 +1092,12 @@ def build_diversification_metric_rows(
     evaluation_id: str,
     portfolio_id: str,
 ) -> list[JsonRow]:
-    ordered = _listing_keys(listings)
-    covariances = _covariance_map(covariance_rows)
+    ordered = listing_keys(listings)
+    covariances = covariance_map(covariance_rows)
     require_complete_covariance(ordered, covariances)
     ordered_weights = tuple(float(weights[isin]) for isin, _, _ in ordered)
     ratio = _diversification_ratio(ordered, ordered_weights, covariances)
-    portfolio_variance = _portfolio_variance(ordered, ordered_weights, covariances)
+    portfolio_variance_value = portfolio_variance(ordered, ordered_weights, covariances)
     asset_volatility = sum(
         weight * (max(0.0, covariances[(listing, listing)]) ** 0.5)
         for listing, weight in zip(ordered, ordered_weights, strict=True)
@@ -1057,7 +1107,7 @@ def build_diversification_metric_rows(
             "evaluation_id": evaluation_id,
             "portfolio_id": portfolio_id,
             "diversification_ratio": ratio,
-            "portfolio_volatility": max(0.0, portfolio_variance) ** 0.5,
+            "portfolio_volatility": max(0.0, portfolio_variance_value) ** 0.5,
             "weighted_asset_volatility": asset_volatility,
             "diagnostics": json.dumps({"objective": MAXIMUM_DIVERSIFICATION_OBJECTIVE}),
         }
@@ -1073,8 +1123,8 @@ def write_maximum_diversification(
     grid_step: float = 0.01,
 ) -> tuple[list[JsonRow], list[JsonRow]]:
     matrix_rows = read_rows(paths.gold_return_matrix(evaluation_id))
-    listings = _listing_rows(matrix_rows)
-    covariance_rows = _read_covariances(paths, listings)
+    listings = listing_rows(matrix_rows)
+    covariance_rows = read_covariances(paths, listings)
     weights = optimize_portfolio(
         listings,
         covariance_rows,
@@ -1128,17 +1178,17 @@ def build_risk_contribution_rows(
     portfolio_id: str,
     tolerance: float = 1e-6,
 ) -> list[JsonRow]:
-    ordered = _listing_keys(listings)
-    covariances = _covariance_map(covariance_rows)
+    ordered = listing_keys(listings)
+    covariances = covariance_map(covariance_rows)
     require_complete_covariance(ordered, covariances)
     ordered_weights = tuple(float(weights[isin]) for isin, _, _ in ordered)
-    portfolio_variance = _portfolio_variance(ordered, ordered_weights, covariances)
+    portfolio_variance_value = portfolio_variance(ordered, ordered_weights, covariances)
     target_budget = 1.0 / len(ordered)
     contribution_rows: list[JsonRow] = []
     for listing, weight in zip(ordered, ordered_weights, strict=True):
         marginal = _marginal_risk_contribution(listing, ordered, ordered_weights, covariances)
         absolute = weight * marginal
-        percent = 0.0 if portfolio_variance == 0 else absolute / portfolio_variance
+        percent = 0.0 if portfolio_variance_value == 0 else absolute / portfolio_variance_value
         contribution_rows.append(
             {
                 "evaluation_id": evaluation_id,
@@ -1153,7 +1203,7 @@ def build_risk_contribution_rows(
                 "percent_risk_contribution": percent,
                 "target_risk_budget": target_budget,
                 "risk_budget_residual": percent - target_budget,
-                "portfolio_variance": portfolio_variance,
+                "portfolio_variance": portfolio_variance_value,
             }
         )
     residual = _risk_contribution_residual(contribution_rows)
@@ -1168,17 +1218,17 @@ def build_risk_contribution_rows(
     ]
 
 
-def _listing_keys(listings: Sequence[Mapping[str, Any]]) -> list[ListingKey]:
+def listing_keys(listings: Sequence[Mapping[str, Any]]) -> list[ListingKey]:
     keys = sorted({(str(row["isin"]), str(row["exchange"]), str(row["code"])) for row in listings})
     if not keys:
         raise ValueError("at least one listing is required")
     return keys
 
 
-def _listing_rows(matrix_rows: Sequence[Mapping[str, Any]]) -> list[JsonRow]:
+def listing_rows(matrix_rows: Sequence[Mapping[str, Any]]) -> list[JsonRow]:
     return [
         {"isin": isin, "exchange": exchange, "code": code}
-        for isin, exchange, code in _listing_keys(matrix_rows)
+        for isin, exchange, code in listing_keys(matrix_rows)
     ]
 
 
@@ -1201,14 +1251,14 @@ def _expected_returns(matrix_rows: Sequence[Mapping[str, Any]]) -> dict[str, flo
     return {isin: sum(values) / len(values) for isin, values in returns.items()}
 
 
-def _read_covariances(paths: LakePaths, listings: Sequence[Mapping[str, Any]]) -> list[JsonRow]:
+def read_covariances(paths: LakePaths, listings: Sequence[Mapping[str, Any]]) -> list[JsonRow]:
     rows: list[JsonRow] = []
-    for isin, exchange, _ in _listing_keys(listings):
+    for isin, exchange, _ in listing_keys(listings):
         rows.extend(read_rows(paths.gold_covariance(exchange, isin)))
     return rows
 
 
-def _covariance_map(
+def covariance_map(
     covariance_rows: Sequence[Mapping[str, Any]],
 ) -> dict[tuple[ListingKey, ListingKey], float]:
     values: dict[tuple[ListingKey, ListingKey], float] = {}
@@ -1256,7 +1306,7 @@ def _solve_production_objective(
     return {isin: weight for (isin, _, _), weight in zip(listings, outcome.weights, strict=True)}
 
 
-def _constraint_violations(
+def constraint_violations(
     weights: Mapping[str, float], constraints: PortfolioConstraints
 ) -> list[str]:
     violations: list[str] = []
@@ -1284,7 +1334,7 @@ def _objective_value(
         return _diversification_ratio(listings, weights, covariances)
     if objective in RISK_PARITY_OBJECTIVES:
         return _risk_parity_residual(listings, weights, covariances)
-    return _portfolio_variance(listings, weights, covariances)
+    return portfolio_variance(listings, weights, covariances)
 
 
 def _candidate_weights(
@@ -1335,7 +1385,7 @@ def _portfolio_return(
     )
 
 
-def _portfolio_variance(
+def portfolio_variance(
     listings: Sequence[ListingKey],
     weights: Sequence[float],
     covariances: Mapping[tuple[ListingKey, ListingKey], float],
@@ -1352,14 +1402,14 @@ def _diversification_ratio(
     weights: Sequence[float],
     covariances: Mapping[tuple[ListingKey, ListingKey], float],
 ) -> float:
-    portfolio_variance = _portfolio_variance(listings, weights, covariances)
-    if portfolio_variance <= 0:
+    variance_value = portfolio_variance(listings, weights, covariances)
+    if variance_value <= 0:
         return 0.0
     weighted_volatility = sum(
         weight * (max(0.0, covariances[(listing, listing)]) ** 0.5)
         for listing, weight in zip(listings, weights, strict=True)
     )
-    return float(weighted_volatility / (portfolio_variance**0.5))
+    return float(weighted_volatility / (variance_value**0.5))
 
 
 def _cluster_variance(
@@ -1369,7 +1419,7 @@ def _cluster_variance(
     if not listings:
         return 0.0
     weight = 1.0 / len(listings)
-    return _portfolio_variance(listings, [weight] * len(listings), covariances)
+    return portfolio_variance(listings, [weight] * len(listings), covariances)
 
 
 def _recursive_hrp_baseline_weights(
@@ -1410,7 +1460,7 @@ def _risk_parity_residual(
     weights: Sequence[float],
     covariances: Mapping[tuple[ListingKey, ListingKey], float],
 ) -> float:
-    variance = _portfolio_variance(listings, weights, covariances)
+    variance = portfolio_variance(listings, weights, covariances)
     target = 1.0 / len(listings)
     residual = 0.0
     for listing, weight in zip(listings, weights, strict=True):
@@ -1431,7 +1481,7 @@ def _sharpe_score(
     expected_returns: Mapping[str, float],
     risk_free_rate: float,
 ) -> float:
-    variance = _portfolio_variance(listings, weights, covariances)
+    variance = portfolio_variance(listings, weights, covariances)
     if variance <= 0:
         return 0.0
     return float(

@@ -1124,6 +1124,8 @@ Determinism: Profile candidate ids include profile version, final membership id,
 
 Idempotency: Re-running a profile with unchanged inputs reuses component optimizer outputs and writes the same ensemble and constraint-diagnostic artifacts.
 
+Progress note: `founder.profiles` (`ProfileContract`, `ProfileRiskLimits`, `defensive_profile`/`balanced_profile`/`income_profile`/`growth_profile`, `build_balanced_ensemble_weights`, `evaluate_profile_candidate`, `write_profile_candidate`) and `founder.portfolio.shrinkage_minimum_variance_weights` (wires `founder.risk_model`'s Ledoit-Wolf estimator into PR60's solver) are implemented and merged as an isolated development step per the stop-the-line policy: the Balanced ensemble, Defensive (shrinkage Minimum Variance), Growth (Equal Risk Contribution), and Income (Minimum CVaR) weight computations are real and production-eligible today, but the Income profile's `min_net_income`/`max_nav_erosion` risk limits always report `unavailable` -- they require PR62E's after-tax cash-flow stack, which remains open, so no income-based production claim is made. Group and issuer concentration limits remain out of scope until group/issuer metadata is plumbed through the lake. This progress does not change the "Depends on: PR62E" gate for the profile's full production eligibility.
+
 ### PR64. Walk-Forward Model Comparison Scorecard
 
 Branch: `feat/walk-forward-scorecard`.
