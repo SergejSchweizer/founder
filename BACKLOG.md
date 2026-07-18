@@ -1220,7 +1220,7 @@ Idempotency: Re-running unchanged selected quotes and selection membership with 
 
 Branch: `feat/multivariate-production-adapter`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/117.
 
 Priority: P1 production stack integration.
 
@@ -1240,7 +1240,7 @@ Progress note: `founder.multivariate_statistics.write_production_multivariate_st
 
 Branch: `feat/multivariate-income-recommendations`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/118.
 
 Priority: P2/P3 user-facing decision support.
 
@@ -1260,7 +1260,7 @@ Progress note: `founder.multivariate_statistics.write_multivariate_recommendatio
 
 Branch: `feat/multivariate-trading-monitoring-handoff`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/119.
 
 Priority: P4 end-user workflow handoff.
 
@@ -1310,7 +1310,7 @@ Idempotency: Re-running unchanged Metadata Filter selections returns the same ro
 
 Branch: `feat/statistics-selection-views`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/120.
 
 Priority: P1 generic retrieval by Metadata Filter selection.
 
@@ -1330,7 +1330,7 @@ Progress note: `founder.statistics_views` (`build_selection_statistics_view`, `w
 
 Branch: `feat/multivariate-selection-cache-consumption`.
 
-Git status: not started. PR: TBD.
+Git status: in progress. PR: TBD.
 
 Priority: P1 portfolio delta reduction.
 
@@ -1343,6 +1343,15 @@ Acceptance: Tests prove unchanged multivariate selection runs reuse generic inpu
 Determinism: Portfolio cache ids are derived from sorted selected listing keys, input statistic versions, and explicit portfolio parameters.
 
 Idempotency: Re-running an unchanged multivariate selection leaves generic input caches and portfolio outputs unchanged while returning the same JSON summary.
+
+Implementation note: this PR adds explicit cache consumption to `founder.multivariate_statistics` behind
+`MultivariateStatisticsConfig.use_selection_statistics_cache` and CLI flag `--use-selection-statistics-cache`.
+The cache mode requires the resolved `selection_id`, writes only missing/stale selected listing return and
+univariate rows, updates bucketed bivariate statistics through the PR73 delta writer, validates the PR74
+Selection Statistics View, reconstructs selected covariance/correlation inputs from the cached univariate and
+bivariate rows, and derives a deterministic `portfolio_run_id` from selection identity plus portfolio parameters.
+If that run id already has a complete cache manifest and all referenced artifacts still exist, the command returns
+the existing summary with `cache_status=portfolio_reused` instead of rewriting portfolio-level artifacts.
 
 ### Series Completion Gate
 

@@ -251,6 +251,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Univariate-filter selection id. Defaults to the latest univariate-filter selection.",
     )
     multivariate.add_argument(
+        "--use-selection-statistics-cache",
+        action="store_true",
+        help=(
+            "Use PR74 selection statistics views and generic Gold caches before "
+            "running portfolio-level calculations."
+        ),
+    )
+    multivariate.add_argument(
         "--evaluation-id",
         default="multivariate-latest",
         help="Stable evaluation id for generated portfolio artifacts.",
@@ -417,6 +425,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             min_weight=args.min_weight,
             max_weight=args.max_weight,
             concurrency=args.concurrency,
+            use_selection_statistics_cache=args.use_selection_statistics_cache,
         )
     else:
         print("founder")
