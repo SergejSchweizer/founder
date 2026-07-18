@@ -265,7 +265,7 @@ production_eligible
 
 Branch: `feat/hrp-cvar-production-optimizers`.
 
-Git status: True HRP merged. PR: https://github.com/SergejSchweizer/founder/pull/104. Minimum CVaR optimization (PR61's other half in BACKLOG.md) remains open.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/104 (True HRP) and https://github.com/SergejSchweizer/founder/pull/109 (Minimum CVaR).
 
 The current recursive midpoint split is not true Hierarchical Risk Parity.
 
