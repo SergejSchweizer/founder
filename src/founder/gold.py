@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
@@ -356,14 +357,14 @@ def _read_listing_outputs(paths: LakePaths, listing: ListingKey) -> GoldListingR
 
 
 def write_gold_inputs(
-    paths: LakePaths, quote_rows: Sequence[Mapping[str, Any]], *, concurrency: int = 2
+    paths: LakePaths, quote_rows: Sequence[Mapping[str, Any]], *, concurrency: int | None = None
 ) -> tuple[list[JsonRow], list[JsonRow], list[JsonRow], list[JsonRow]]:
     returns = build_returns(quote_rows)
     returns_by_listing = index_returns(returns)
     quotes_by_listing = _index_quotes(quote_rows)
     listings = tuple(sorted(quotes_by_listing))
     completed_at = datetime.now(UTC).isoformat()
-    workers = max(1, concurrency)
+    workers = max(1, concurrency if concurrency is not None else (os.cpu_count() or 1))
     input_snapshot_date = max(
         (_listing_last_quote_date(quotes_by_listing.get(listing, [])) for listing in listings),
         default="",

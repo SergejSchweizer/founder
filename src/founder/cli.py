@@ -334,8 +334,10 @@ def build_parser() -> argparse.ArgumentParser:
     multivariate.add_argument(
         "--concurrency",
         type=int,
-        default=2,
-        help="Worker process count for Gold input generation. Defaults to 2.",
+        help=(
+            "Worker process count for Gold input generation. "
+            "Defaults to all CPU cores visible to the system."
+        ),
     )
     return parser
 
