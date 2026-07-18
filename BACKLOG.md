@@ -1330,7 +1330,7 @@ Progress note: `founder.statistics_views` (`build_selection_statistics_view`, `w
 
 Branch: `feat/multivariate-selection-cache-consumption`.
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/121.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/121.
 
 Priority: P1 portfolio delta reduction.
 
