@@ -133,7 +133,7 @@ Persistence changes:
 ```text
 src/founder/schemas.py
 src/founder/paths.py
-docs/lake_contracts.md
+CONTRACTS.md
 ```
 
 Retain aggregate `rebalance_events` and add a long-format dataset:
@@ -852,7 +852,7 @@ Every new dataset must update these files together:
 ```text
 src/founder/schemas.py
 src/founder/paths.py
-docs/lake_contracts.md
+CONTRACTS.md
 ARCHITECTURE.md
 DECISIONS.md
 RISKS.md
