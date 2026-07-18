@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from pathlib import Path
+from typing import Any, cast
 
+from founder.bivariate_statistics import write_bivariate_statistics
 from founder.calculation_status import UNAVAILABLE
 from founder.contract_versioning import stable_contract_id
 from founder.evaluation import (
@@ -18,7 +20,8 @@ from founder.evaluation import (
     write_tail_risk_evaluation,
     write_walk_forward_backtest,
 )
-from founder.gold import write_gold_inputs
+from founder.gold import build_returns, write_gold_inputs
+from founder.gold_pair_stats import DEFAULT_BUCKET_COUNT, sort_pair_rows
 from founder.paths import LakePaths
 from founder.portfolio import (
     PortfolioConstraints,
@@ -49,13 +52,15 @@ from founder.return_quality import evaluate_quote_quality
 from founder.risk_model import estimate_risk_model
 from founder.scorecard import ScorecardCandidate, build_model_comparison_scorecard
 from founder.silver import read_silver_quotes
+from founder.statistics_views import DEFAULT_BIVARIATE_VERSION, read_selection_statistics
 from founder.stress import (
     block_bootstrap_scenarios,
     build_sensitivity_summary,
     historical_stress_scenario,
 )
-from founder.table_io import JsonRow, read_rows, write_rows
+from founder.table_io import JsonRow, read_json, read_rows, write_json, write_rows
 from founder.trading import prepare_flatex_orders, write_flatex_orders
+from founder.univariate_statistics import write_univariate_statistics
 
 DEFAULT_OBJECTIVES: tuple[str, ...] = (
     "equal_weight",
@@ -83,6 +88,11 @@ class MultivariateStatisticsConfig:
     objectives: tuple[str, ...] = DEFAULT_OBJECTIVES
     frontier_target_returns: tuple[float, ...] = (-0.01, 0.0, 0.01)
     concurrency: int = 2
+    selection_id: str | None = None
+    selection_source_module: str = "univariate_filter"
+    use_selection_statistics_cache: bool = False
+    bivariate_version: str = DEFAULT_BIVARIATE_VERSION
+    bivariate_bucket_count: int = DEFAULT_BUCKET_COUNT
 
 
 def write_multivariate_statistics(
@@ -99,11 +109,22 @@ def write_multivariate_statistics(
     """
     resolved_config = config or MultivariateStatisticsConfig()
     quotes = _filter_quotes_to_selection(read_silver_quotes(paths), selected_rows)
-    returns, _correlations, _covariances, _features = write_gold_inputs(
-        paths,
-        quotes,
-        concurrency=resolved_config.concurrency,
-    )
+    cache_summary: JsonRow = {"cache_status": "disabled"}
+    if resolved_config.use_selection_statistics_cache:
+        returns, cache_summary = _prepare_selection_cached_inputs(
+            paths, selected_rows, quotes, resolved_config
+        )
+        portfolio_run_id = _portfolio_run_id(resolved_config, cache_summary)
+        reused_summary = _read_reusable_portfolio_summary(paths, portfolio_run_id)
+        if reused_summary is not None:
+            return reused_summary
+    else:
+        returns, _correlations, _covariances, _features = write_gold_inputs(
+            paths,
+            quotes,
+            concurrency=resolved_config.concurrency,
+        )
+        portfolio_run_id = ""
     matrix = build_return_matrix(returns, resolved_config.evaluation_id)
     asset_metrics = build_asset_metrics(
         matrix,
@@ -114,7 +135,7 @@ def write_multivariate_statistics(
     write_rows(paths.gold_asset_metrics(resolved_config.evaluation_id), asset_metrics)
 
     if not matrix:
-        return {
+        summary = {
             "asset_metric_rows": len(asset_metrics),
             "backtest_rows": 0,
             "backtest_weight_rows": 0,
@@ -136,6 +157,10 @@ def write_multivariate_statistics(
                 }
             ),
         }
+        summary.update(cache_summary)
+        if portfolio_run_id:
+            _write_portfolio_cache_manifest(paths, portfolio_run_id, summary, resolved_config)
+        return summary
 
     written_portfolios = 0
     equal_weight_id = _portfolio_id(resolved_config, "equal_weight")
@@ -238,7 +263,7 @@ def write_multivariate_statistics(
         profile=resolved_config.walk_forward_profile,
         transaction_cost_rate=resolved_config.transaction_cost_rate,
     )
-    return {
+    summary = {
         "asset_metric_rows": len(asset_metrics),
         "backtest_rows": len(backtests),
         "backtest_weight_rows": len(backtest_weights),
@@ -259,6 +284,231 @@ def write_multivariate_statistics(
             {(str(row["isin"]), str(row["exchange"]), str(row["code"])) for row in selected_rows}
         ),
     }
+    summary.update(cache_summary)
+    if portfolio_run_id:
+        _write_portfolio_cache_manifest(paths, portfolio_run_id, summary, resolved_config)
+    return summary
+
+
+def _prepare_selection_cached_inputs(
+    paths: LakePaths,
+    selected_rows: Sequence[Mapping[str, Any]],
+    quotes: Sequence[Mapping[str, Any]],
+    config: MultivariateStatisticsConfig,
+) -> tuple[list[JsonRow], JsonRow]:
+    if config.selection_id is None:
+        raise ValueError("selection_id is required when use_selection_statistics_cache=True")
+
+    _write_selected_returns_cache(paths, quotes)
+    write_univariate_statistics(
+        paths,
+        quotes,
+        confidence_level=config.confidence_level,
+        concurrency=config.concurrency,
+    )
+    returns = _read_selected_returns(paths, selected_rows)
+    write_bivariate_statistics(
+        paths,
+        returns,
+        version=config.bivariate_version,
+        bucket_count=config.bivariate_bucket_count,
+        concurrency=config.concurrency,
+    )
+    univariate_rows, bivariate_rows, view = read_selection_statistics(
+        paths,
+        selection_id=config.selection_id,
+        source_module=config.selection_source_module,
+        listing_rows=selected_rows,
+        bivariate_version=config.bivariate_version,
+        bivariate_bucket_count=config.bivariate_bucket_count,
+    )
+    _write_selected_pair_inputs(paths, univariate_rows, bivariate_rows)
+    return returns, {
+        "cache_status": "prepared",
+        "selection_statistics_view_id": view["view_id"],
+        "selection_statistics_listing_count": view["listing_count"],
+        "selection_statistics_pair_count": view["present_bivariate_pair_count"],
+    }
+
+
+def _write_selected_returns_cache(paths: LakePaths, quotes: Sequence[Mapping[str, Any]]) -> None:
+    by_listing: dict[tuple[str, str, str], list[JsonRow]] = {}
+    for row in build_returns(quotes):
+        key = (str(row["isin"]), str(row["exchange"]), str(row["code"]))
+        by_listing.setdefault(key, []).append(dict(row))
+    for isin, exchange, _code in sorted(by_listing):
+        rows = by_listing[(isin, exchange, _code)]
+        _write_rows_if_changed(paths.gold_returns(exchange, isin), rows)
+
+
+def _read_selected_returns(
+    paths: LakePaths, selected_rows: Sequence[Mapping[str, Any]]
+) -> list[JsonRow]:
+    rows: list[JsonRow] = []
+    for isin, exchange, _code in _selected_listing_keys(selected_rows):
+        rows.extend(read_rows(paths.gold_returns(exchange, isin)))
+    selected = set(_selected_listing_keys(selected_rows))
+    return [
+        row
+        for row in rows
+        if (str(row["isin"]), str(row["exchange"]), str(row["code"])) in selected
+    ]
+
+
+def _write_selected_pair_inputs(
+    paths: LakePaths,
+    univariate_rows: Sequence[Mapping[str, Any]],
+    bivariate_rows: Sequence[Mapping[str, Any]],
+) -> None:
+    covariances: list[JsonRow] = []
+    correlations: list[JsonRow] = []
+    for row in univariate_rows:
+        listing = (str(row["isin"]), str(row["exchange"]), str(row["code"]))
+        variance = float(row["daily_log_return_std"]) ** 2
+        covariances.append(_pair_metric_row(listing, listing, "covariance", variance))
+        correlations.append(_pair_metric_row(listing, listing, "correlation", 1.0))
+    for row in bivariate_rows:
+        left = (str(row["left_isin"]), str(row["left_exchange"]), str(row["left_code"]))
+        right = (str(row["right_isin"]), str(row["right_exchange"]), str(row["right_code"]))
+        covariance = float(row["covariance"])
+        correlation = float(row["pearson_correlation"])
+        covariances.extend(
+            (
+                _pair_metric_row(left, right, "covariance", covariance),
+                _pair_metric_row(right, left, "covariance", covariance),
+            )
+        )
+        correlations.extend(
+            (
+                _pair_metric_row(left, right, "correlation", correlation),
+                _pair_metric_row(right, left, "correlation", correlation),
+            )
+        )
+
+    for isin, exchange, _code in _selected_listing_keys(univariate_rows):
+        _write_rows_if_changed(
+            paths.gold_covariance(exchange, isin),
+            [row for row in sort_pair_rows(covariances) if str(row["left_isin"]) == isin],
+        )
+        _write_rows_if_changed(
+            paths.gold_correlation(exchange, isin),
+            [row for row in sort_pair_rows(correlations) if str(row["left_isin"]) == isin],
+        )
+
+
+def _pair_metric_row(
+    left: tuple[str, str, str], right: tuple[str, str, str], field: str, value: float
+) -> JsonRow:
+    return {
+        "left_isin": left[0],
+        "left_exchange": left[1],
+        "left_code": left[2],
+        "right_isin": right[0],
+        "right_exchange": right[1],
+        "right_code": right[2],
+        field: value,
+    }
+
+
+def _selected_listing_keys(rows: Sequence[Mapping[str, Any]]) -> list[tuple[str, str, str]]:
+    return sorted({(str(row["isin"]), str(row["exchange"]), str(row["code"])) for row in rows})
+
+
+def _write_rows_if_changed(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
+    normalized = [dict(row) for row in rows]
+    if read_rows(path) == normalized:
+        return
+    write_rows(path, normalized)
+
+
+def _portfolio_run_id(
+    config: MultivariateStatisticsConfig, cache_summary: Mapping[str, Any]
+) -> str:
+    return stable_contract_id(
+        "multivariate_selection_portfolio_run",
+        {
+            "evaluation_id": config.evaluation_id,
+            "portfolio_id_prefix": config.portfolio_id_prefix,
+            "confidence_level": config.confidence_level,
+            "grid_step": config.grid_step,
+            "train_window": config.train_window,
+            "test_window": config.test_window,
+            "walk_forward_profile": config.walk_forward_profile,
+            "rebalance_schedule": config.rebalance_schedule,
+            "transaction_cost_rate": config.transaction_cost_rate,
+            "drift_threshold": config.drift_threshold,
+            "constraints": config.constraints.as_dict(),
+            "objectives": config.objectives,
+            "frontier_target_returns": config.frontier_target_returns,
+            "selection_id": config.selection_id,
+            "selection_source_module": config.selection_source_module,
+            "selection_statistics_view_id": cache_summary.get("selection_statistics_view_id"),
+            "bivariate_version": config.bivariate_version,
+        },
+    )
+
+
+def _portfolio_cache_manifest_path(paths: LakePaths, portfolio_run_id: str) -> Path:
+    return paths.job_manifest("multivariate-statistics-cache", portfolio_run_id)
+
+
+def _read_reusable_portfolio_summary(paths: LakePaths, portfolio_run_id: str) -> JsonRow | None:
+    manifest_path = _portfolio_cache_manifest_path(paths, portfolio_run_id)
+    if not manifest_path.exists():
+        return None
+    manifest = read_json(manifest_path)
+    summary_object: object = manifest.get("summary")
+    artifact_path_objects: object = manifest.get("artifact_paths")
+    if not isinstance(summary_object, dict) or not isinstance(artifact_path_objects, list):
+        return None
+    summary = cast(dict[str, Any], summary_object)
+    artifact_paths = cast(list[object], artifact_path_objects)
+    if not all(Path(str(path)).exists() for path in artifact_paths):
+        return None
+    reused = dict(summary)
+    reused["cache_status"] = "portfolio_reused"
+    reused["portfolio_run_id"] = portfolio_run_id
+    return reused
+
+
+def _write_portfolio_cache_manifest(
+    paths: LakePaths,
+    portfolio_run_id: str,
+    summary: Mapping[str, Any],
+    config: MultivariateStatisticsConfig,
+) -> None:
+    evaluation_id = str(summary["evaluation_id"])
+    artifact_paths = [
+        paths.gold_return_matrix(evaluation_id),
+        paths.gold_asset_metrics(evaluation_id),
+        paths.gold_portfolio_returns(evaluation_id),
+        paths.gold_portfolio_metrics(evaluation_id),
+        paths.gold_frontier_points(evaluation_id),
+        paths.gold_frontier_weights(evaluation_id),
+        paths.gold_backtests(f"{evaluation_id}-walk-forward"),
+        paths.gold_backtest_weights(f"{evaluation_id}-walk-forward"),
+        paths.gold_rebalance_events(f"{evaluation_id}-rebalance-{config.rebalance_schedule}"),
+        paths.gold_rebalance_weights(f"{evaluation_id}-rebalance-{config.rebalance_schedule}"),
+        paths.gold_tail_risk(f"{evaluation_id}-tail-risk"),
+        paths.gold_hrp_clusters(evaluation_id),
+        paths.gold_hrp_linkage(evaluation_id),
+        paths.gold_diversification_metrics(evaluation_id),
+    ]
+    artifact_paths.extend(
+        paths.gold_optimized_weights(objective, evaluation_id)
+        for objective in (
+            *tuple(item for item in config.objectives if item != "equal_weight"),
+            "hierarchical_risk_parity",
+            "maximum_diversification",
+        )
+    )
+    payload = {
+        "status": "completed",
+        "portfolio_run_id": portfolio_run_id,
+        "summary": {**dict(summary), "portfolio_run_id": portfolio_run_id},
+        "artifact_paths": [str(path) for path in artifact_paths if path.exists()],
+    }
+    write_json(_portfolio_cache_manifest_path(paths, portfolio_run_id), payload)
 
 
 def _write_portfolio_bundle(

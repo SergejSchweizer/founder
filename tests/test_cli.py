@@ -577,11 +577,13 @@ def test_cli_runs_multivariate_statistics_from_latest_univariate_selection(
             "0.5",
             "--concurrency",
             "1",
+            "--use-selection-statistics-cache",
         ]
     )
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["selection_id"] == "latest-two"
+    assert payload["cache_status"] == "prepared"
     assert payload["selected_listing_count"] == 2
     assert payload["quote_rows"] == 8
     assert payload["matrix_rows"] == 6
