@@ -1234,6 +1234,8 @@ Determinism: Production adapter ids include selection membership, quality policy
 
 Idempotency: Re-running production multivariate analysis with unchanged prerequisite artifacts reuses those artifacts and writes the same analysis summary without recomputing lower-level caches.
 
+Progress note: `founder.multivariate_statistics.write_production_multivariate_statistics`/`ProductionMultivariateConfig` are implemented and merged. It refuses (raises `ValueError`) rather than falling back to a baseline when: the selection's Silver quote history fails `founder.return_quality.evaluate_quote_quality`'s production data-quality gate (invalid prices, insufficient history, stale prices, unexplained gaps); the aligned return matrix is empty; `founder.risk_model.estimate_risk_model`'s diagnostics are not `production_eligible`; a requested `founder.profiles` candidate is `infeasible`; or a candidate's baseline comparison is empty. It writes weight rows for every requested profile via `founder.profiles.write_profile_candidate`, and the Balanced profile's candidate already includes True HRP, Equal Risk Contribution, and shrinkage Minimum Variance ensemble rows via the existing `build_balanced_ensemble_weights` composition (no separate wiring needed). The deterministic `production_adapter_id` is derived from selection membership, the quality policy name, risk-model estimator/algorithm version, requested profile names, profile versions, and the constraint set. Existing `write_multivariate_statistics` (the deterministic baseline module) is unchanged and remains available; this is an additive production-mode entry point, not a replacement.
+
 ### PR71. Multivariate Income And Recommendation Outputs
 
 Branch: `feat/multivariate-income-recommendations`.

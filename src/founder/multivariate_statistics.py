@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from founder.contract_versioning import stable_contract_id
 from founder.evaluation import (
     build_asset_metrics,
     build_return_matrix,
@@ -20,10 +21,26 @@ from founder.gold import write_gold_inputs
 from founder.paths import LakePaths
 from founder.portfolio import (
     PortfolioConstraints,
+    covariance_map,
+    listing_keys,
+    listing_rows,
+    read_covariances,
+    require_complete_covariance,
     write_hierarchical_risk_parity,
     write_maximum_diversification,
     write_optimized_weights,
 )
+from founder.profiles import (
+    PROFILE_NAMES,
+    balanced_profile,
+    defensive_profile,
+    evaluate_profile_candidate,
+    growth_profile,
+    income_profile,
+    write_profile_candidate,
+)
+from founder.return_quality import evaluate_quote_quality
+from founder.risk_model import estimate_risk_model
 from founder.silver import read_silver_quotes
 from founder.table_io import JsonRow, write_rows
 
@@ -290,8 +307,151 @@ def _weights_from_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
     return {str(row["isin"]): float(row["weight"]) for row in rows}
 
 
+@dataclass(frozen=True)
+class ProductionMultivariateConfig:
+    """Configuration for one production-mode multivariate statistics run.
+
+    Unlike `MultivariateStatisticsConfig` (deterministic baseline objectives),
+    this config drives `write_production_multivariate_statistics`, which
+    requires a passing production data-quality gate, production-eligible risk-
+    model diagnostics, and feasible profile candidates with a baseline
+    comparison before writing anything.
+    """
+
+    evaluation_id: str = "multivariate-production"
+    portfolio_id_prefix: str = "multivariate-production"
+    confidence_level: float = 0.95
+    constraints: PortfolioConstraints = PortfolioConstraints(max_weight=0.25)
+    risk_model_estimator: str = "ledoit_wolf"
+    profile_names: tuple[str, ...] = PROFILE_NAMES
+    concurrency: int = 2
+
+
+_PROFILE_BUILDERS: dict[str, Any] = {
+    "defensive": defensive_profile,
+    "balanced": balanced_profile,
+    "income": income_profile,
+    "growth": growth_profile,
+}
+
+
+def write_production_multivariate_statistics(
+    paths: LakePaths,
+    selected_rows: Sequence[Mapping[str, Any]],
+    *,
+    config: ProductionMultivariateConfig | None = None,
+) -> JsonRow:
+    """Write production-mode portfolio profile analytics for the selected listings.
+
+    Refuses (raises `ValueError`) rather than silently falling back to a
+    baseline when: any selected listing's quote history fails the production
+    data-quality gate, there is insufficient aligned return history, the
+    risk-model estimate is not production eligible, a requested profile
+    candidate is infeasible, or a profile candidate is missing its baseline
+    comparison. See BACKLOG.md's PR70 acceptance criteria.
+    """
+    resolved_config = config or ProductionMultivariateConfig()
+    unknown_profiles = set(resolved_config.profile_names) - set(PROFILE_NAMES)
+    if unknown_profiles:
+        raise ValueError(f"unknown profile_names: {sorted(unknown_profiles)}")
+
+    quotes = _filter_quotes_to_selection(read_silver_quotes(paths), selected_rows)
+    quality_by_listing = _quote_quality_by_listing(quotes)
+    failing_quality = sorted(
+        f"{isin}/{exchange}/{code}:{quality['data_quality_reason']}"
+        for (isin, exchange, code), quality in quality_by_listing.items()
+        if not quality["production_eligible"]
+    )
+    if failing_quality:
+        raise ValueError("production_data_quality_gate_failed: " + ", ".join(failing_quality))
+
+    returns, _correlations, _covariances, _features = write_gold_inputs(
+        paths, quotes, concurrency=resolved_config.concurrency
+    )
+    matrix = build_return_matrix(returns, resolved_config.evaluation_id)
+    if not matrix:
+        raise ValueError("insufficient_history: no aligned return matrix rows for the selection")
+    write_rows(paths.gold_return_matrix(resolved_config.evaluation_id), matrix)
+
+    listings = listing_rows(matrix)
+    ordered = listing_keys(listings)
+    covariance_rows = read_covariances(paths, listings)
+    covariances = covariance_map(covariance_rows)
+    require_complete_covariance(ordered, covariances)
+
+    risk_model = estimate_risk_model(
+        matrix, listings=ordered, estimator=resolved_config.risk_model_estimator
+    )
+    if not risk_model.diagnostics.production_eligible:
+        raise ValueError(
+            "risk_model_not_production_eligible: "
+            + ", ".join(risk_model.diagnostics.availability_reasons)
+        )
+
+    profile_candidates: dict[str, JsonRow] = {}
+    written_weight_rows = 0
+    for profile_name in resolved_config.profile_names:
+        profile = _PROFILE_BUILDERS[profile_name](max_weight=resolved_config.constraints.max_weight)
+        candidate = evaluate_profile_candidate(profile, listings, covariance_rows, matrix)
+        if candidate["status"] != "feasible":
+            raise ValueError(f"profile {profile_name!r} is infeasible: {candidate['reasons']}")
+        if not candidate["baseline_comparison"]:
+            raise ValueError(f"profile {profile_name!r} is missing a baseline comparison")
+        profile_candidates[profile_name] = candidate
+        weight_rows = write_profile_candidate(
+            paths,
+            evaluation_id=resolved_config.evaluation_id,
+            portfolio_id=f"{resolved_config.portfolio_id_prefix}-{profile_name}",
+            profile=profile,
+        )
+        written_weight_rows += len(weight_rows)
+
+    production_adapter_id = stable_contract_id(
+        "multivariate_production_adapter",
+        {
+            "selection_membership": sorted(str(isin) for isin, _, _ in ordered),
+            "quality_policy": "return_quality.evaluate_quote_quality",
+            "risk_model_id": risk_model.diagnostics.estimator,
+            "risk_model_algorithm_version": risk_model.diagnostics.algorithm_version,
+            "optimizer_ids": sorted(resolved_config.profile_names),
+            "profile_version": [
+                profile_candidates[name]["profile_version"] for name in sorted(profile_candidates)
+            ],
+            "constraint_version": resolved_config.constraints.as_dict(),
+        },
+    )
+
+    return {
+        "production_adapter_id": production_adapter_id,
+        "evaluation_id": resolved_config.evaluation_id,
+        "selected_listing_count": len(ordered),
+        "matrix_rows": len(matrix),
+        "risk_model_estimator": risk_model.diagnostics.estimator,
+        "risk_model_production_eligible": risk_model.diagnostics.production_eligible,
+        "profile_names": list(resolved_config.profile_names),
+        "profile_candidate_ids": {
+            name: candidate["profile_candidate_id"]
+            for name, candidate in profile_candidates.items()
+        },
+        "weight_rows": written_weight_rows,
+        "production_eligible": True,
+    }
+
+
+def _quote_quality_by_listing(
+    quotes: Sequence[Mapping[str, Any]],
+) -> dict[tuple[str, str, str], JsonRow]:
+    by_listing: dict[tuple[str, str, str], list[Mapping[str, Any]]] = {}
+    for row in quotes:
+        key = (str(row["isin"]), str(row["exchange"]), str(row["code"]))
+        by_listing.setdefault(key, []).append(row)
+    return {key: evaluate_quote_quality(rows) for key, rows in by_listing.items()}
+
+
 __all__ = [
     "DEFAULT_OBJECTIVES",
     "MultivariateStatisticsConfig",
+    "ProductionMultivariateConfig",
     "write_multivariate_statistics",
+    "write_production_multivariate_statistics",
 ]
