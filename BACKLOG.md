@@ -635,7 +635,7 @@ Idempotency: Re-running the complete UI funnel against unchanged authorized inpu
 
 ## Series Completion Gate
 
-Final branch: `feat/hosted-multitenant-cutover`.
+Final hosted-security branch: `feat/hosted-multitenant-cutover`.
 
 Final UI branch: `feat/web-ui-production-cutover`.
 
