@@ -7,6 +7,65 @@ if (process.argv.includes("--health")) {
 const port = Number.parseInt(process.env.PORT || "3000", 10);
 const apiBaseUrl = process.env.FOUNDER_API_BASE_URL || "http://api:8000";
 
+const funnelSteps = [
+  { id: "data", label: "Data", status: "ready", href: "/data" },
+  { id: "metadata", label: "Metadata", status: "not-started", href: "/metadata" },
+  { id: "univariate", label: "Univariate", status: "running", href: "/univariate" },
+  { id: "filter", label: "Filter", status: "warning", href: "/filter" },
+  { id: "diversification", label: "Diversification", status: "stale", href: "/diversification" },
+  { id: "portfolio", label: "Portfolio", status: "complete", href: "/portfolio" },
+  { id: "validation", label: "Validation", status: "failed", href: "/validation" },
+  { id: "report", label: "Report", status: "not-started", href: "/report" },
+];
+
+const routeSkeletons = [
+  { id: "dashboard", title: "Dashboard", tone: "ready" },
+  { id: "projects", title: "Projects", tone: "complete" },
+  { id: "data", title: "Data", tone: "ready" },
+  { id: "metadata", title: "Metadata", tone: "not-started" },
+  { id: "univariate", title: "Univariate", tone: "running" },
+  { id: "filter", title: "Filter", tone: "warning" },
+  { id: "diversification", title: "Diversification", tone: "stale" },
+  { id: "portfolio", title: "Portfolio", tone: "complete" },
+  { id: "validation", title: "Validation", tone: "failed" },
+  { id: "report", title: "Report", tone: "not-started" },
+  { id: "settings", title: "Settings", tone: "ready" },
+];
+
+const designTokens = {
+  typography: {
+    fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+    pageTitle: "28px",
+    sectionTitle: "18px",
+    body: "14px",
+    meta: "12px",
+  },
+  spacing: {
+    page: "24px",
+    panel: "16px",
+    control: "10px",
+    gap: "12px",
+  },
+  color: {
+    canvas: "#f8faf9",
+    surface: "#ffffff",
+    ink: "#18211d",
+    muted: "#64736b",
+    line: "#d7dfda",
+    accent: "#0f766e",
+    focus: "#2563eb",
+    warning: "#b45309",
+    danger: "#b91c1c",
+    stale: "#6d5d10",
+    running: "#1d4ed8",
+    complete: "#166534",
+  },
+  radius: {
+    panel: "8px",
+    control: "6px",
+  },
+};
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -14,6 +73,347 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function navItem(route) {
+  return `<a class="nav-link nav-link--${route.tone}" href="/${route.id}" data-route="${route.id}">
+    <span class="nav-dot" aria-hidden="true"></span>
+    <span>${escapeHtml(route.title)}</span>
+  </a>`;
+}
+
+function funnelItem(step, index) {
+  return `<a class="funnel-step funnel-step--${step.status}" href="${step.href}" data-funnel-step="${step.id}" data-state="${step.status}">
+    <span class="funnel-index" aria-hidden="true">${index + 1}</span>
+    <span class="funnel-copy">
+      <span class="funnel-label">${escapeHtml(step.label)}</span>
+      <span class="funnel-status">${escapeHtml(step.status)}</span>
+    </span>
+  </a>`;
+}
+
+function routePanel(route) {
+  return `<section class="route-panel route-panel--${route.tone}" id="${route.id}" data-route-skeleton="${route.id}">
+    <div class="route-panel__header">
+      <p class="eyebrow">${escapeHtml(route.tone)}</p>
+      <h2>${escapeHtml(route.title)}</h2>
+    </div>
+    <div class="route-panel__body">
+      <div class="metric-strip" aria-label="${escapeHtml(route.title)} summary">
+        <span><strong data-synthetic-count="${route.id}">0</strong><small>items</small></span>
+        <span><strong>ready</strong><small>state</small></span>
+        <span><strong>snapshot</strong><small>source</small></span>
+      </div>
+      <div class="empty-state" data-empty-state="${route.id}">No user-owned run is loaded for this route.</div>
+    </div>
+  </section>`;
+}
+
+function renderStyles() {
+  return `<style>
+:root {
+  color-scheme: light;
+  --font-family: ${designTokens.typography.fontFamily};
+  --page-title: ${designTokens.typography.pageTitle};
+  --section-title: ${designTokens.typography.sectionTitle};
+  --body: ${designTokens.typography.body};
+  --meta: ${designTokens.typography.meta};
+  --space-page: ${designTokens.spacing.page};
+  --space-panel: ${designTokens.spacing.panel};
+  --space-control: ${designTokens.spacing.control};
+  --gap: ${designTokens.spacing.gap};
+  --canvas: ${designTokens.color.canvas};
+  --surface: ${designTokens.color.surface};
+  --ink: ${designTokens.color.ink};
+  --muted: ${designTokens.color.muted};
+  --line: ${designTokens.color.line};
+  --accent: ${designTokens.color.accent};
+  --focus: ${designTokens.color.focus};
+  --warning: ${designTokens.color.warning};
+  --danger: ${designTokens.color.danger};
+  --stale: ${designTokens.color.stale};
+  --running: ${designTokens.color.running};
+  --complete: ${designTokens.color.complete};
+  --radius-panel: ${designTokens.radius.panel};
+  --radius-control: ${designTokens.radius.control};
+}
+* { box-sizing: border-box; }
+html { background: var(--canvas); }
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--canvas);
+  font-family: var(--font-family);
+  font-size: var(--body);
+  line-height: 1.45;
+}
+a { color: inherit; }
+button, input, select {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 12px;
+  cursor: pointer;
+}
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+button.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--focus) 35%, transparent);
+  outline-offset: 2px;
+}
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+}
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: auto;
+  border-right: 1px solid var(--line);
+  background: #eef4f1;
+  padding: 18px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  margin-bottom: 18px;
+  font-weight: 700;
+}
+.brand-mark {
+  width: 34px;
+  height: 34px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+}
+.snapshot-indicator {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  padding: 12px;
+  margin-bottom: 18px;
+}
+.snapshot-indicator span {
+  display: block;
+  color: var(--muted);
+  font-size: var(--meta);
+}
+.nav-group {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.nav-link {
+  min-height: 38px;
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: var(--radius-control);
+  text-decoration: none;
+}
+.nav-link:hover { background: #dfeae5; }
+.nav-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.nav-link--complete .nav-dot { background: var(--complete); }
+.nav-link--running .nav-dot { background: var(--running); }
+.nav-link--warning .nav-dot { background: var(--warning); }
+.nav-link--failed .nav-dot { background: var(--danger); }
+.workspace {
+  min-width: 0;
+  padding: var(--space-page);
+}
+.topbar {
+  min-height: 72px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 16px;
+}
+h1, h2, p { margin: 0; }
+h1 { font-size: var(--page-title); font-weight: 720; letter-spacing: 0; }
+h2 { font-size: var(--section-title); font-weight: 700; letter-spacing: 0; }
+.subtle { color: var(--muted); }
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.funnel {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(120px, 1fr));
+  gap: 8px;
+  margin: 18px 0;
+}
+.funnel-step {
+  min-height: 66px;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  padding: 10px;
+  text-decoration: none;
+}
+.funnel-index {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #edf4f1;
+  color: var(--accent);
+  font-size: var(--meta);
+  font-weight: 700;
+}
+.funnel-copy { min-width: 0; }
+.funnel-label, .funnel-status {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.funnel-label { font-weight: 700; }
+.funnel-status { color: var(--muted); font-size: var(--meta); }
+.funnel-step--complete { border-color: color-mix(in srgb, var(--complete) 40%, var(--line)); }
+.funnel-step--running { border-color: color-mix(in srgb, var(--running) 50%, var(--line)); }
+.funnel-step--warning { border-color: color-mix(in srgb, var(--warning) 50%, var(--line)); }
+.funnel-step--failed { border-color: color-mix(in srgb, var(--danger) 50%, var(--line)); }
+.funnel-step--stale { border-color: color-mix(in srgb, var(--stale) 50%, var(--line)); }
+.content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.6fr);
+  gap: 16px;
+  align-items: start;
+}
+.route-stack, .side-stack {
+  display: grid;
+  gap: 12px;
+}
+.route-panel, .control-panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  padding: var(--space-panel);
+}
+.route-panel__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+}
+.eyebrow {
+  color: var(--muted);
+  font-size: var(--meta);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.metric-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.metric-strip span {
+  min-height: 58px;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: 8px;
+}
+.metric-strip strong { font-size: 16px; }
+.metric-strip small { color: var(--muted); }
+.empty-state {
+  margin-top: 10px;
+  color: var(--muted);
+}
+form {
+  display: grid;
+  gap: 12px;
+}
+label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: var(--meta);
+}
+input, select {
+  width: 100%;
+  padding: 0 var(--space-control);
+}
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+pre {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: #fbfdfc;
+  padding: 10px;
+  color: var(--muted);
+}
+@media (max-width: 1040px) {
+  .app-shell { grid-template-columns: 1fr; }
+  .sidebar {
+    position: static;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .nav-group { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .funnel { grid-template-columns: repeat(4, minmax(120px, 1fr)); }
+  .content-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 620px) {
+  .workspace { padding: 16px; }
+  .topbar { align-items: flex-start; flex-direction: column; }
+  .funnel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metric-strip { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+</style>`;
 }
 
 function renderAppShell(apiUrl) {
@@ -25,269 +425,115 @@ function renderAppShell(apiUrl) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="founder-csrf-token" content="">
 <title>Founder Research</title>
-<style>
-:root {
-  color-scheme: light;
-  --ink: #17201b;
-  --muted: #536259;
-  --line: #cbd6cf;
-  --panel: #f7faf8;
-  --canvas: #ffffff;
-  --accent: #0f766e;
-  --accent-ink: #ffffff;
-  --warn: #9a3412;
-  --ok: #166534;
-}
-* { box-sizing: border-box; }
-body {
-  margin: 0;
-  color: var(--ink);
-  background: var(--canvas);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-button, input, select {
-  min-height: 36px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #fff;
-  color: var(--ink);
-  font: inherit;
-}
-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 12px;
-  cursor: pointer;
-}
-button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-button.danger { border-color: var(--warn); color: var(--warn); }
-.shell {
-  min-height: 100vh;
-  display: grid;
-  grid-template-columns: minmax(212px, 260px) 1fr;
-}
-aside {
-  border-right: 1px solid var(--line);
-  background: var(--panel);
-  padding: 18px;
-}
-main { padding: 22px; }
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 24px;
-  font-weight: 700;
-}
-.mark {
-  width: 28px;
-  height: 28px;
-  border: 2px solid var(--accent);
-  border-radius: 50%;
-  display: inline-grid;
-  place-items: center;
-  color: var(--accent);
-}
-nav { display: grid; gap: 6px; }
-nav a {
-  padding: 9px 10px;
-  color: var(--ink);
-  border-radius: 6px;
-  text-decoration: none;
-}
-nav a:hover, nav a:focus { background: #e7f2ef; outline: none; }
-.topbar {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: center;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 14px;
-  margin-bottom: 18px;
-}
-.status {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  color: var(--muted);
-  font-size: 14px;
-}
-.dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--ok);
-}
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 14px;
-}
-section {
-  border-top: 1px solid var(--line);
-  padding-top: 16px;
-  margin-top: 18px;
-}
-.panel {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 14px;
-  background: #fff;
-}
-.row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 10px;
-  align-items: end;
-}
-label { display: grid; gap: 5px; color: var(--muted); font-size: 13px; }
-input, select { width: 100%; padding: 0 10px; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th, td { border-bottom: 1px solid var(--line); padding: 8px; text-align: left; }
-th { color: var(--muted); font-weight: 600; }
-.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.stage {
-  display: grid;
-  grid-template-columns: 34px 1fr;
-  gap: 10px;
-  align-items: center;
-}
-.stage-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 6px;
-  display: grid;
-  place-items: center;
-  background: #e7f2ef;
-  color: var(--accent);
-  font-weight: 700;
-}
-pre {
-  overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 10px;
-  background: #f9fbfa;
-}
-@media (max-width: 760px) {
-  .shell { grid-template-columns: 1fr; }
-  aside { border-right: 0; border-bottom: 1px solid var(--line); }
-  .topbar { align-items: flex-start; flex-direction: column; }
-}
-</style>
+${renderStyles()}
 </head>
 <body>
-<div class="shell">
-<aside>
-  <div class="brand"><span class="mark" aria-hidden="true">F</span><span>Founder Research</span></div>
-  <nav aria-label="Research workflow">
-    <a href="#dashboard">Dashboard</a>
-    <a href="#credentials">Credentials</a>
-    <a href="#downloads">Downloads</a>
-    <a href="#metadata">Metadata Filter</a>
-    <a href="#statistics">Statistics</a>
-    <a href="#analysis">Portfolio Analysis</a>
-    <a href="#account">Account</a>
-  </nav>
-</aside>
-<main>
-  <div class="topbar">
-    <div>
-      <h1>Research Workspace</h1>
-      <div class="status"><span class="dot" aria-hidden="true"></span><span data-api-base="${escapedApiUrl}">API ${escapedApiUrl}</span></div>
+<div class="app-shell" data-design-system-version="founder-web-shell-v1">
+  <aside class="sidebar" aria-label="Founder navigation">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">F</span><span>Founder Research</span></div>
+    <div class="snapshot-indicator" data-snapshot-indicator>
+      <strong>Project snapshot</strong>
+      <span>Not selected</span>
     </div>
-    <div class="actions">
-      <a href="/auth/google/start"><button class="primary" type="button">Google Login</button></a>
-      <button type="button" data-action="logout">Logout</button>
-    </div>
-  </div>
-
-  <section id="dashboard">
-    <h2>Dashboard</h2>
-    <div class="grid">
-      <div class="panel"><div class="stage"><span class="stage-icon">1</span><strong data-session-state>Session</strong></div><pre data-session-output>{}</pre></div>
-      <div class="panel"><div class="stage"><span class="stage-icon">2</span><strong>Visible Coverage</strong></div><pre data-coverage-output>{ "items": [] }</pre></div>
-      <div class="panel"><div class="stage"><span class="stage-icon">3</span><strong>Latest Analysis</strong></div><pre data-analysis-output>{}</pre></div>
-    </div>
-  </section>
-
-  <section id="credentials">
-    <h2>Credentials</h2>
-    <form data-form="credential">
-      <div class="row">
-        <label>EODHD provider key<input name="provider_key" type="password" autocomplete="new-password" required></label>
-        <label>Status<input name="credential_status" value="not loaded" readonly></label>
+    <nav class="nav-group" aria-label="Primary routes">
+      ${routeSkeletons.map(navItem).join("")}
+    </nav>
+  </aside>
+  <main class="workspace">
+    <header class="topbar">
+      <div>
+        <h1>Research Workspace</h1>
+        <p class="subtle" data-api-base="${escapedApiUrl}">API ${escapedApiUrl}</p>
       </div>
       <div class="actions">
-        <button class="primary" type="submit">Save Key</button>
-        <button class="danger" type="button" data-action="delete-credential">Delete Key</button>
+        <a href="/auth/google/start"><button class="primary" type="button" aria-label="Start Google login">Google Login</button></a>
+        <button type="button" data-action="logout">Logout</button>
       </div>
-    </form>
-  </section>
+    </header>
 
-  <section id="downloads">
-    <h2>Downloads</h2>
-    <form data-form="download">
-      <div class="row">
-        <label>Symbols<input name="symbols" placeholder="AAA.XETRA, BBB.XETRA"></label>
-        <label>Run status<input name="download_status" value="idle" readonly></label>
-      </div>
-      <div class="actions">
-        <button type="button" data-action="plan-download">Plan</button>
-        <button class="primary" type="submit">Run</button>
-      </div>
-    </form>
-  </section>
+    <nav class="funnel" aria-label="Persisted research funnel">
+      ${funnelSteps.map(funnelItem).join("")}
+    </nav>
 
-  <section id="metadata">
-    <h2>Metadata Filter</h2>
-    <form data-form="metadata-filter">
-      <div class="row">
-        <label>Name contains<input name="name_contains" placeholder="UCITS ETF"></label>
-        <label>Exchange<select name="exchange"><option value="">Any</option><option>XETRA</option><option>LSE</option></select></label>
-        <label>Distribution<select name="distribution_frequency"><option value="">Any</option><option>monthly</option><option>quarterly</option><option>annual</option></select></label>
+    <div class="content-grid">
+      <div class="route-stack">
+        ${routeSkeletons.map(routePanel).join("")}
       </div>
-      <div class="actions"><button class="primary" type="submit">Create Selection</button></div>
-    </form>
-  </section>
+      <div class="side-stack">
+        <section class="control-panel" id="credentials" data-route-skeleton="credentials">
+          <div class="route-panel__header"><h2>Credentials</h2><p class="eyebrow">write-only</p></div>
+          <form data-form="credential">
+            <div class="field-grid">
+              <label>EODHD provider key<input name="provider_key" type="password" autocomplete="new-password" required></label>
+              <label>Status<input name="credential_status" value="not loaded" readonly></label>
+            </div>
+            <div class="actions">
+              <button class="primary" type="submit">Save Key</button>
+              <button class="danger" type="button" data-action="delete-credential">Delete Key</button>
+            </div>
+          </form>
+        </section>
 
-  <section id="statistics">
-    <h2>Statistics</h2>
-    <div class="grid">
-      <div class="panel"><strong>Univariate Statistics</strong><div class="actions"><button data-action="run-univariate-statistics">Run</button></div></div>
-      <div class="panel"><strong>Univariate Filter</strong><div class="actions"><button data-action="run-univariate-filter">Apply</button></div></div>
-      <div class="panel"><strong>Bivariate Statistics</strong><div class="actions"><button data-action="run-bivariate-statistics">Run</button></div></div>
-      <div class="panel"><strong>Multivariate Statistics</strong><div class="actions"><button data-action="run-multivariate-statistics">Run</button></div></div>
+        <section class="control-panel" id="downloads" data-route-skeleton="downloads">
+          <div class="route-panel__header"><h2>Downloads</h2><p class="eyebrow">user scoped</p></div>
+          <form data-form="download">
+            <div class="field-grid">
+              <label>Symbols<input name="symbols" placeholder="AAA.XETRA, BBB.XETRA"></label>
+              <label>Run status<input name="download_status" value="idle" readonly></label>
+            </div>
+            <div class="actions">
+              <button type="button" data-action="plan-download">Plan</button>
+              <button class="primary" type="submit">Run</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="control-panel" id="metadata-filter" data-route-skeleton="metadata-filter">
+          <div class="route-panel__header"><h2>Metadata Filter</h2><p class="eyebrow">server backed</p></div>
+          <form data-form="metadata-filter">
+            <div class="field-grid">
+              <label>Name contains<input name="name_contains" placeholder="UCITS ETF"></label>
+              <label>Exchange<select name="exchange"><option value="">Any</option><option>XETRA</option><option>LSE</option></select></label>
+              <label>Distribution<select name="distribution_frequency"><option value="">Any</option><option>monthly</option><option>quarterly</option><option>annual</option></select></label>
+            </div>
+            <div class="actions"><button class="primary" type="submit">Create Selection</button></div>
+          </form>
+        </section>
+
+        <section class="control-panel" id="statistics-controls" data-route-skeleton="statistics-controls">
+          <div class="route-panel__header"><h2>Statistics</h2><p class="eyebrow">API produced</p></div>
+          <div class="actions">
+            <button data-action="run-univariate-statistics">Univariate Statistics</button>
+            <button data-action="run-univariate-filter">Univariate Filter</button>
+            <button data-action="run-bivariate-statistics">Bivariate Statistics</button>
+            <button data-action="run-multivariate-statistics">Multivariate Statistics</button>
+          </div>
+        </section>
+
+        <section class="control-panel" id="analysis-controls" data-route-skeleton="analysis-controls">
+          <div class="route-panel__header"><h2>Portfolio Analysis</h2><p class="eyebrow">no browser math</p></div>
+          <form data-form="analysis">
+            <div class="field-grid">
+              <label>Project<input name="project_name" value="ETF Research"></label>
+              <label>Objective<select name="objective"><option>minimum_variance</option><option>risk_parity</option><option>maximum_diversification</option></select></label>
+            </div>
+            <div class="actions">
+              <button class="primary" type="submit">Analyze</button>
+              <button type="button" data-action="load-report">Report</button>
+            </div>
+          </form>
+          <pre data-analysis-output>{}</pre>
+        </section>
+
+        <section class="control-panel" id="account" data-route-skeleton="account">
+          <div class="route-panel__header"><h2>Account</h2><p class="eyebrow">owned data</p></div>
+          <div class="actions">
+            <button class="danger" type="button" data-action="delete-account">Delete Account Data</button>
+          </div>
+        </section>
+      </div>
     </div>
-  </section>
-
-  <section id="analysis">
-    <h2>Portfolio Analysis</h2>
-    <form data-form="analysis">
-      <div class="row">
-        <label>Project<input name="project_name" value="ETF Research"></label>
-        <label>Objective<select name="objective"><option>minimum_variance</option><option>risk_parity</option><option>maximum_diversification</option></select></label>
-      </div>
-      <div class="actions">
-        <button class="primary" type="submit">Analyze</button>
-        <button type="button" data-action="load-report">Report</button>
-      </div>
-    </form>
-    <table aria-label="Portfolio weights">
-      <thead><tr><th>Instrument</th><th>Weight</th><th>Risk</th></tr></thead>
-      <tbody data-weights-body><tr><td colspan="3">No analysis loaded</td></tr></tbody>
-    </table>
-  </section>
-
-  <section id="account">
-    <h2>Account</h2>
-    <div class="actions">
-      <button class="danger" type="button" data-action="delete-account">Delete Account Data</button>
-    </div>
-  </section>
-</main>
+  </main>
 </div>
 <script>
 const apiBaseUrl = ${JSON.stringify(apiUrl)};
@@ -333,11 +579,11 @@ function parseSymbols(value) {
 }
 async function refreshSession() {
   const session = await apiRequest(apiRoutes.session);
-  writeJson("[data-session-output]", session);
+  writeJson("[data-analysis-output]", { session });
 }
 async function refreshDatasets() {
   const datasets = await apiRequest(apiRoutes.datasets);
-  writeJson("[data-coverage-output]", datasets);
+  writeJson("[data-analysis-output]", { datasets });
 }
 document.querySelector('[data-form="credential"]').addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -396,7 +642,7 @@ document.querySelector('[data-form="analysis"]').addEventListener("submit", asyn
 });
 document.querySelector('[data-action="delete-account"]').addEventListener("click", async () => {
   await apiRequest(apiRoutes.account, { method: "DELETE" });
-  writeJson("[data-session-output]", { status: "deleted" });
+  writeJson("[data-analysis-output]", { status: "deleted" });
 });
 window.founderApi = { apiRequest, apiRoutes, idempotencyKey, refreshDatasets, refreshSession };
 </script>
@@ -416,4 +662,4 @@ const server = http.createServer((request, response) => {
 
 server.listen(port, "0.0.0.0");
 
-module.exports = { renderAppShell };
+module.exports = { designTokens, funnelSteps, renderAppShell, routeSkeletons };

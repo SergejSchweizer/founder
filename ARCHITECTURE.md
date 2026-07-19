@@ -75,7 +75,7 @@ Founder has two related execution modes.
 | Portfolio, backtest, stress, recommendation, and Flatex export logic | Active | These are Python library and CLI workflows; they do not execute broker orders. |
 | Docker Compose topology | Active development runtime | PostgreSQL, API, and Web containers start with health checks and hardened mounts. |
 | Hosted FastAPI route surface | Active local-development API | It currently uses deterministic in-memory repositories and development request headers. |
-| Hosted browser workspace | Active local-development UI | It is served by `apps/web/server.js`, not Next.js or React. |
+| Hosted browser workspace | Active local-development UI | It is served by `apps/web/server.js` as a versioned production shell baseline with design tokens, responsive navigation, and persisted funnel route skeletons. |
 | PostgreSQL schema, roles, migrations, and RLS | Implemented contract | `founder.hosted_catalog` defines and tests them, but the active FastAPI state is not yet backed by PostgreSQL. |
 | Google OIDC and server-side sessions | Implemented contract | `founder.hosted_auth` is tested, but it is not yet connected to the active Web/API request flow. |
 | Encrypted EODHD credential vault | Implemented contract and local adapter | The API uses a deterministic in-memory development vault, not a production secret-manager-backed repository. |
