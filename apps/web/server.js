@@ -7,6 +7,13 @@ if (process.argv.includes("--health")) {
 
 const port = Number.parseInt(process.env.PORT || "3000", 10);
 const apiBaseUrl = process.env.FOUNDER_API_BASE_URL || "http://api:8000";
+const localDevUserId = "local-google-dev-user";
+const localDevCsrfToken = "valid-csrf";
+const localDevGoogleEmail = (
+  process.env.FOUNDER_LOCAL_DEV_GOOGLE_EMAIL || "local-google-dev-user@example.test"
+).toLowerCase();
+const sessionCookieName = "founder_session_user";
+const csrfCookieName = "founder_csrf";
 
 const funnelSteps = [
   { id: "data", label: "Data", status: "ready", href: "/data" },
@@ -84,6 +91,25 @@ function navItem(route) {
   </a>`;
 }
 
+function userLabel(session) {
+  if (!session) return "";
+  return String(session.email || session.display_name || session.user_id || "").toLowerCase();
+}
+
+function authProviderLabel(session) {
+  if (!session || !session.auth_provider) return "";
+  return String(session.auth_provider).toLowerCase();
+}
+
+function brandMarkup(session = null) {
+  const label = userLabel(session);
+  const provider = authProviderLabel(session);
+  const userLine = label
+    ? `<span class="brand-user" data-auth-user>${escapeHtml(label)}${provider ? ` · ${escapeHtml(provider)}` : ""}</span>`
+    : "";
+  return `<div class="brand"><span class="brand-mark" aria-hidden="true">F</span><span class="brand-copy"><span>Founder Research</span>${userLine}</span></div>`;
+}
+
 function funnelItem(step, index) {
   return `<a class="funnel-step funnel-step--${step.status}" href="${step.href}" data-funnel-step="${step.id}" data-state="${step.status}">
     <span class="funnel-index" aria-hidden="true">${index + 1}</span>
@@ -141,6 +167,7 @@ function renderStyles() {
   --radius-control: ${designTokens.radius.control};
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html { background: var(--canvas); }
 body {
   margin: 0;
@@ -223,11 +250,22 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 }
 .brand {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   min-height: 42px;
   margin-bottom: 18px;
   font-weight: 700;
+}
+.brand-copy {
+  display: grid;
+  gap: 1px;
+}
+.brand-user {
+  color: var(--muted);
+  font-size: var(--meta);
+  font-weight: 500;
+  line-height: 1.25;
+  text-transform: lowercase;
 }
 .brand-mark {
   width: 34px;
@@ -447,34 +485,10 @@ pre {
 </style>`;
 }
 
-function renderAppShell(apiUrl) {
-  const escapedApiUrl = escapeHtml(apiUrl);
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="founder-csrf-token" content="">
-<title>Founder Research</title>
-${renderStyles()}
-</head>
-<body>
-<div class="login-gate" data-auth-gate>
-  <section class="login-panel" aria-label="Founder login">
-    <div class="brand"><span class="brand-mark" aria-hidden="true">F</span><span>Founder Research</span></div>
-    <h1>Sign in to continue</h1>
-    <p class="login-panel__copy">The research dashboard is only available after Google authentication.</p>
-    <div class="actions">
-      <a href="/auth/google/start"><button class="primary" type="button" aria-label="Start Google login">Google Login</button></a>
-    </div>
-    <p class="login-panel__status" data-auth-status>Checking session...</p>
-  </section>
-</div>
-<div id="authenticated-root" data-authenticated-root></div>
-<template id="authenticated-shell-template" data-authenticated-template>
-<div class="app-shell" data-design-system-version="founder-web-shell-v1">
+function renderAuthenticatedShell(escapedApiUrl, session = null) {
+  return `<div class="app-shell" data-design-system-version="founder-web-shell-v1">
   <aside class="sidebar" aria-label="Founder navigation">
-    <div class="brand"><span class="brand-mark" aria-hidden="true">F</span><span>Founder Research</span></div>
+    ${brandMarkup(session)}
     <div class="snapshot-indicator" data-snapshot-indicator>
       <strong>Project snapshot</strong>
       <span>Not selected</span>
@@ -577,9 +591,46 @@ ${renderStyles()}
       </div>
     </div>
   </main>
+</div>`;
+}
+
+function renderAppShell(apiUrl, initialSession = null) {
+  const escapedApiUrl = escapeHtml(apiUrl);
+  const escapedCsrfToken = initialSession && initialSession.csrf_token ? escapeHtml(initialSession.csrf_token) : "";
+  const initialShell =
+    initialSession && initialSession.authenticated === true
+      ? renderAuthenticatedShell(escapedApiUrl, initialSession)
+      : "";
+  const gateHidden = initialSession && initialSession.authenticated === true ? " hidden" : "";
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="founder-csrf-token" content="${escapedCsrfToken}">
+<title>Founder Research</title>
+${renderStyles()}
+</head>
+<body>
+<div class="login-gate" data-auth-gate${gateHidden}>
+  <section class="login-panel" aria-label="Founder login">
+    ${brandMarkup()}
+    <h1>Sign in to continue</h1>
+    <p class="login-panel__copy">The research dashboard is only available after Google authentication.</p>
+    <div class="actions">
+      <form action="/auth/google/start" method="get" data-form="google-login">
+        <button class="primary" type="submit" aria-label="Start Google login">Google Login</button>
+      </form>
+    </div>
+    <p class="login-panel__status" data-auth-status>Checking session...</p>
+  </section>
 </div>
+<div id="authenticated-root" data-authenticated-root>${initialShell}</div>
+<template id="authenticated-shell-template" data-authenticated-template>
+${renderAuthenticatedShell(escapedApiUrl)}
 </template>
 <script>
+const initialSession = ${JSON.stringify(initialSession)};
 const apiBaseUrl = "/api";
 const apiRoutes = {
   session: "/session",
@@ -618,6 +669,10 @@ function writeJson(selector, value) {
   const target = document.querySelector(selector);
   if (target) target.textContent = JSON.stringify(value, null, 2);
 }
+function setAuthStatus(message) {
+  const status = document.querySelector("[data-auth-status]");
+  if (status) status.textContent = message;
+}
 function parseSymbols(value) {
   return value.split(",").map((symbol) => symbol.trim()).filter(Boolean);
 }
@@ -633,21 +688,30 @@ function mountAuthenticatedShell(session) {
   const gate = document.querySelector("[data-auth-gate]");
   const root = document.querySelector("[data-authenticated-root]");
   const template = document.querySelector("[data-authenticated-template]");
-  if (!root || !template || root.childElementCount > 0) return;
-  root.appendChild(template.content.cloneNode(true));
+  if (!root || !template) return;
+  if (root.childElementCount === 0) root.appendChild(template.content.cloneNode(true));
   const csrfMeta = document.querySelector('meta[name="founder-csrf-token"]');
   if (csrfMeta && session && session.csrf_token) csrfMeta.content = session.csrf_token;
+  const authUser = document.querySelector("[data-auth-user]");
+  if (authUser && session) {
+    const label = userLabel(session);
+    const provider = authProviderLabel(session);
+    authUser.textContent = label + (provider ? " · " + provider : "");
+  }
   if (gate) gate.hidden = true;
   writeJson("[data-analysis-output]", { session });
   bindAuthenticatedHandlers();
 }
 function showLoginGate() {
   const gate = document.querySelector("[data-auth-gate]");
-  const status = document.querySelector("[data-auth-status]");
   if (gate) gate.hidden = false;
-  if (status) status.textContent = "Google login is required before the dashboard is shown.";
+  setAuthStatus("Google login is required before the dashboard is shown.");
 }
 async function initializeAuthGate() {
+  if (initialSession && initialSession.authenticated === true) {
+    mountAuthenticatedShell(initialSession);
+    return;
+  }
   try {
     const session = await apiRequest(apiRoutes.session);
     if (session && session.authenticated === true) {
@@ -660,7 +724,10 @@ async function initializeAuthGate() {
   }
   showLoginGate();
 }
+let authenticatedHandlersBound = false;
 function bindAuthenticatedHandlers() {
+if (authenticatedHandlersBound) return;
+authenticatedHandlersBound = true;
 document.querySelector('[data-form="credential"]').addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -738,15 +805,75 @@ const server = http.createServer((request, response) => {
     proxyApiRequest(request, response);
     return;
   }
+  if (request.url === "/auth/google/start") {
+    startLocalGoogleLogin(response);
+    return;
+  }
+  if (request.url === "/auth/logout") {
+    logoutLocalGoogleSession(response);
+    return;
+  }
   if (request.url && request.url.startsWith("/auth/")) {
     proxyAuthRequest(request, response);
     return;
   }
   response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-  response.end(renderAppShell(apiBaseUrl));
+  response.end(renderAppShell(apiBaseUrl, sessionFromRequest(request)));
 });
 
 server.listen(port, "0.0.0.0");
+
+function cookieHeader(name, value, options = {}) {
+  const parts = [`${name}=${value}`, "Path=/", "SameSite=Lax"];
+  if (options.httpOnly) parts.push("HttpOnly");
+  if (options.maxAge !== undefined) parts.push(`Max-Age=${options.maxAge}`);
+  return parts.join("; ");
+}
+
+function startLocalGoogleLogin(response) {
+  response.writeHead(303, {
+    location: "/",
+    "set-cookie": [
+      cookieHeader(sessionCookieName, localDevUserId, { httpOnly: true, maxAge: 3600 }),
+      cookieHeader(csrfCookieName, localDevCsrfToken, { maxAge: 3600 }),
+    ],
+  });
+  response.end();
+}
+
+function logoutLocalGoogleSession(response) {
+  response.writeHead(303, {
+    location: "/",
+    "set-cookie": [
+      cookieHeader(sessionCookieName, "", { httpOnly: true, maxAge: 0 }),
+      cookieHeader(csrfCookieName, "", { maxAge: 0 }),
+    ],
+  });
+  response.end();
+}
+
+function parseCookies(cookieHeaderValue) {
+  const cookies = {};
+  for (const part of String(cookieHeaderValue || "").split(";")) {
+    const [rawName, ...rawValueParts] = part.trim().split("=");
+    if (!rawName) continue;
+    cookies[rawName] = rawValueParts.join("=");
+  }
+  return cookies;
+}
+
+function sessionFromRequest(request) {
+  const cookies = parseCookies(request.headers.cookie);
+  if (cookies[sessionCookieName] !== localDevUserId) return null;
+  return {
+    authenticated: true,
+    user_id: localDevUserId,
+    email: localDevGoogleEmail,
+    display_name: localDevGoogleEmail,
+    auth_provider: "local-dev-google",
+    csrf_token: cookies[csrfCookieName] || localDevCsrfToken,
+  };
+}
 
 function proxyApiRequest(clientRequest, clientResponse) {
   const target = new URL(clientRequest.url.replace(/^\/api/, ""), apiBaseUrl);
@@ -780,8 +907,13 @@ function proxyRequestToTarget(clientRequest, clientResponse, target) {
 module.exports = {
   designTokens,
   funnelSteps,
+  logoutLocalGoogleSession,
+  parseCookies,
   proxyApiRequest,
   proxyAuthRequest,
   renderAppShell,
+  renderAuthenticatedShell,
   routeSkeletons,
+  sessionFromRequest,
+  startLocalGoogleLogin,
 };

@@ -45,10 +45,18 @@ def test_dashboard_shell_is_gated_until_authenticated_session() -> None:
 
     assert "data-auth-gate" in source
     assert 'id="authenticated-root"' in source
+    assert "renderAppShell(apiUrl, initialSession = null)" in source
+    assert "${initialShell}" in source
+    assert "const initialSession =" in source
+    assert "initialSession && initialSession.authenticated === true" in source
+    assert "brandMarkup(session = null)" in source
+    assert 'class="brand-user" data-auth-user' in source
+    assert "text-transform: lowercase;" in source
     assert "data-authenticated-template" in source
     assert "initializeAuthGate()" in source
     assert "mountAuthenticatedShell(session)" in source
     assert "bindAuthenticatedHandlers()" in source
+    assert "[hidden] { display: none !important; }" in source
     assert 'meta[name="founder-csrf-token"]' in source
     assert "session.csrf_token" in source
     assert "Google login is required before the dashboard is shown." in source
@@ -133,7 +141,9 @@ def test_web_shell_models_complete_funnel_order_and_status_states() -> None:
 def test_web_shell_keeps_secret_inputs_write_only_and_uses_google_entrypoint() -> None:
     source = _web_source()
 
-    assert 'href="/auth/google/start"' in source
+    assert 'action="/auth/google/start" method="get"' in source
+    assert 'data-form="google-login"' in source
+    assert 'type="submit" aria-label="Start Google login"' in source
     assert 'name="provider_key" type="password"' in source
     assert 'autocomplete="new-password"' in source
     assert "masked_label" not in source
@@ -186,6 +196,36 @@ def test_web_server_proxies_api_requests_same_origin_to_internal_api() -> None:
     assert "clientRequest.url.replace" in source
     assert "apiBaseUrl)" in source
     assert 'process.env.FOUNDER_API_BASE_URL || "http://api:8000"' in source
+
+
+def test_web_server_handles_local_google_session_same_origin_before_auth_proxy() -> None:
+    source = _web_source()
+
+    assert 'if (request.url === "/auth/google/start")' in source
+    assert 'if (request.url === "/auth/logout")' in source
+    assert "startLocalGoogleLogin(response)" in source
+    assert "logoutLocalGoogleSession(response)" in source
+    assert "function cookieHeader(name, value, options = {})" in source
+    assert "function parseCookies(cookieHeaderValue)" in source
+    assert "function sessionFromRequest(request)" in source
+    assert "renderAppShell(apiBaseUrl, sessionFromRequest(request))" in source
+    assert "founder_session_user" in source
+    assert "founder_csrf" in source
+    assert "FOUNDER_LOCAL_DEV_GOOGLE_EMAIL" in source
+    assert "local-google-dev-user@example.test" in source
+    assert 'auth_provider: "local-dev-google"' in source
+    assert source.index('request.url === "/auth/google/start"') < source.index(
+        'request.url.startsWith("/auth/")'
+    )
+
+
+def test_web_shell_binds_authenticated_handlers_once_for_client_or_server_render() -> None:
+    source = _web_source()
+
+    assert "let authenticatedHandlersBound = false;" in source
+    assert "if (authenticatedHandlersBound) return;" in source
+    assert "authenticatedHandlersBound = true;" in source
+    assert "if (root.childElementCount === 0)" in source
 
 
 def test_web_package_remains_local_container_runnable_without_external_calls() -> None:
