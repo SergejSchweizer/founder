@@ -19,6 +19,7 @@ Required check families:
 
 - Ruff lint and format.
 - Hosted public-repository security gates.
+- Hosted readiness records for licensing, privacy, retention, backup, restore, and key rotation.
 - Pyright strict typing.
 - Pytest Unit and Integration shards.
 - Coverage threshold enforcement on `main`.
@@ -108,6 +109,12 @@ Local equivalent:
 
 ```bash
 uv run founder-quality pr
+```
+
+Release cutover can require the stricter public-hosted readiness mode:
+
+```bash
+uv run python -m founder.hosted_readiness --require-public-hosted
 ```
 
 The local pre-commit hook runs this same PR gate before accepting commits.
