@@ -10,8 +10,10 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "cryptography>=45.0.0",
+    "fastapi>=0.116.0",
     "psycopg[binary]>=3.2.9",
     "pyarrow>=25.0.0",
+    "uvicorn>=0.35.0",
 ]
 
 [project.scripts]
@@ -22,6 +24,7 @@ founder-quality = "founder.quality:main"
 
 [dependency-groups]
 dev = [
+    "httpx2>=0.28.0",
     "import-linter>=2.13",
     "pre-commit>=4.2.0",
     "pyright>=1.1.411",

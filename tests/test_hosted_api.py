@@ -1,0 +1,224 @@
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi.testclient import TestClient
+
+from founder.hosted_api import HostedApiState, create_app
+
+
+def _client() -> TestClient:
+    return TestClient(create_app(HostedApiState()))
+
+
+def _headers(
+    user_id: str = "user-a", *, csrf: bool = True, idempotency: str | None = None
+) -> dict[str, str]:
+    headers = {"X-Founder-User": user_id}
+    if csrf:
+        headers["X-Founder-CSRF"] = "valid-csrf"
+    if idempotency is not None:
+        headers["Idempotency-Key"] = idempotency
+    return headers
+
+
+def _json(response: Any) -> dict[str, Any]:
+    payload = response.json()
+    assert isinstance(payload, dict)
+    return payload
+
+
+def test_session_requires_authentication() -> None:
+    client = _client()
+
+    assert client.get("/health").json() == {"status": "ok"}
+    assert client.get("/session").status_code == 401
+    assert _json(client.get("/session", headers=_headers(csrf=False))) == {
+        "authenticated": True,
+        "user_id": "user-a",
+    }
+
+
+def test_state_changing_routes_require_csrf() -> None:
+    client = _client()
+
+    response = client.post(
+        "/projects",
+        headers=_headers(csrf=False),
+        json={"name": "Core"},
+    )
+
+    assert response.status_code == 403
+    assert _json(response)["detail"]["code"] == "csrf_required"
+
+
+def test_credential_lifecycle_redacts_sensitive_material() -> None:
+    client = _client()
+
+    created = _json(
+        client.post(
+            "/credentials/eodhd",
+            headers=_headers(idempotency="credential-1"),
+            json={"provider_key": "secret-provider-token"},
+        )
+    )
+    repeated = _json(
+        client.post(
+            "/credentials/eodhd",
+            headers=_headers(idempotency="credential-1"),
+            json={"provider_key": "changed-token"},
+        )
+    )
+    deleted = _json(client.delete("/credentials/eodhd", headers=_headers()))
+    rendered = str(created) + str(repeated) + str(deleted)
+
+    assert created["status"] == "active"
+    assert repeated["credential_id"] == created["credential_id"]
+    assert deleted["status"] == "deleted"
+    assert "secret-provider-token" not in rendered
+    assert "changed-token" not in rendered
+    assert "fingerprint" not in rendered
+    assert "ciphertext" not in rendered
+    assert "nonce" not in rendered
+
+
+def test_downloads_publish_visible_user_datasets_and_are_idempotent() -> None:
+    client = _client()
+
+    plan = _json(
+        client.post(
+            "/downloads/plan",
+            headers=_headers(),
+            json={"symbols": ["AAA.XETRA", "BBB.XETRA"]},
+        )
+    )
+    run = _json(
+        client.post(
+            "/downloads/run",
+            headers=_headers(idempotency="download-1"),
+            json={"symbols": ["AAA.XETRA", "BBB.XETRA"]},
+        )
+    )
+    repeated = _json(
+        client.post(
+            "/downloads/run",
+            headers=_headers(idempotency="download-1"),
+            json={"symbols": ["CCC.XETRA"]},
+        )
+    )
+    datasets = _json(client.get("/datasets", headers=_headers(csrf=False)))
+    other_datasets = _json(client.get("/datasets", headers=_headers("user-b", csrf=False)))
+
+    assert plan["status"] == "planned"
+    assert run == repeated
+    assert run["status"] == "succeeded"
+    assert run["observation_count"] == 2
+    assert len(datasets["items"]) == 2
+    assert other_datasets["items"] == []
+
+
+def test_projects_selections_and_analyses_are_user_scoped_and_paginated() -> None:
+    client = _client()
+    project = _json(
+        client.post(
+            "/projects",
+            headers=_headers(idempotency="project-1"),
+            json={"name": "ETF Research"},
+        )
+    )
+    repeated_project = _json(
+        client.post(
+            "/projects",
+            headers=_headers(idempotency="project-1"),
+            json={"name": "ETF Research"},
+        )
+    )
+    selection = _json(
+        client.post(
+            "/selections",
+            headers=_headers(),
+            json={
+                "project_id": project["project_id"],
+                "name": "Monthly ETFs",
+                "member_ids": ["IE1", "IE2"],
+            },
+        )
+    )
+    analysis = _json(
+        client.post(
+            "/analyses",
+            headers=_headers(idempotency="analysis-1"),
+            json={
+                "project_id": project["project_id"],
+                "selection_id": selection["selection_id"],
+                "settings": {"objective": "minimum_variance"},
+            },
+        )
+    )
+    repeated_analysis = _json(
+        client.post(
+            "/analyses",
+            headers=_headers(idempotency="analysis-1"),
+            json={
+                "project_id": project["project_id"],
+                "selection_id": selection["selection_id"],
+                "settings": {"objective": "changed"},
+            },
+        )
+    )
+    projects_page = _json(client.get("/projects?limit=1&offset=0", headers=_headers(csrf=False)))
+
+    assert repeated_project == project
+    assert selection["member_ids"] == ["IE1", "IE2"]
+    assert analysis["status"] == "succeeded"
+    assert analysis["cache_hit"] is False
+    assert repeated_analysis["run_id"] == analysis["run_id"]
+    assert repeated_analysis["cache_hit"] is True
+    assert len(projects_page["items"]) == 1
+    assert _json(
+        client.get(f"/analyses/{analysis['run_id']}/metrics", headers=_headers(csrf=False))
+    )["items"]
+    assert _json(
+        client.get(f"/analyses/{analysis['run_id']}/returns", headers=_headers(csrf=False))
+    )["items"]
+    assert _json(
+        client.get(f"/analyses/{analysis['run_id']}/weights", headers=_headers(csrf=False))
+    )["items"]
+    assert "summary" in _json(
+        client.get(f"/analyses/{analysis['run_id']}/report", headers=_headers(csrf=False))
+    )
+
+    assert (
+        client.get(
+            f"/selections/{selection['selection_id']}", headers=_headers("user-b", csrf=False)
+        ).status_code
+        == 404
+    )
+    assert (
+        client.get(
+            f"/analyses/{analysis['run_id']}", headers=_headers("user-b", csrf=False)
+        ).status_code
+        == 404
+    )
+    assert client.get("/projects?limit=0", headers=_headers(csrf=False)).status_code == 422
+
+
+def test_account_deletion_removes_user_owned_api_state() -> None:
+    client = _client()
+    project = _json(client.post("/projects", headers=_headers(), json={"name": "Delete Me"}))
+    selection = _json(
+        client.post(
+            "/selections",
+            headers=_headers(),
+            json={"project_id": project["project_id"], "name": "S", "member_ids": ["IE1"]},
+        )
+    )
+
+    assert client.delete("/account", headers=_headers()).json() == {"status": "deleted"}
+    assert client.get("/projects", headers=_headers(csrf=False)).json() == {"items": []}
+    assert (
+        client.get(
+            f"/selections/{selection['selection_id']}", headers=_headers(csrf=False)
+        ).status_code
+        == 404
+    )

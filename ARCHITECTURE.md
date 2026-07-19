@@ -182,6 +182,12 @@ project snapshot pointer is still current.
 PostgreSQL is internal-only with a named persistent volume, API owns shared analytical storage and required secrets,
 and Web exposes only the browser surface without mounting shared data or credential secrets.
 
+`founder.hosted_api` owns the PR96 FastAPI application boundary. It exposes user-scoped session, credential,
+download, dataset, project, selection, analysis, metrics, returns, weights, report, and account-deletion routes;
+all mutating routes require CSRF, write routes accept idempotency keys where retries can duplicate work, and every
+resource lookup resolves through the authenticated user's repository scope rather than through storage paths or shared
+artifact ids.
+
 ## Current Shape
 
 - **Fetch All ISINs**: EODHD exchange symbol-list enumeration stores one irregularly refreshed all-ISIN metadata reference.

@@ -542,6 +542,8 @@ The hosted development runtime is defined in [compose.yaml](compose.yaml). It st
 docker compose --env-file .env.local up --build
 ```
 
+The hosted API is exposed by `founder.hosted_api` and mounted in the API container. It provides user-scoped session, credential, download, dataset, project, selection, analysis, metrics, returns, weights, report, and account-deletion routes for the Web UI.
+
 Install dependencies with:
 
 ```bash
