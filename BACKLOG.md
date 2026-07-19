@@ -499,7 +499,7 @@ Idempotency: Reloading or revisiting a route reconstructs the same shell from se
 
 Branch: `feat/web-google-oidc-runtime-login`.
 
-Git status: in progress. PR: TBD.
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/162.
 
 Priority: P0 authenticated user boundary for the local and hosted Web UI.
 
