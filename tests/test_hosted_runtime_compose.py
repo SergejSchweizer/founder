@@ -39,8 +39,12 @@ def test_compose_defines_persistent_internal_postgres_and_shared_data() -> None:
 def test_compose_exposes_only_api_and_web_development_ports() -> None:
     services = cast(ComposeMapping, _compose()["services"])
 
-    assert cast(ComposeMapping, services["api"])["ports"] == ["${FOUNDER_API_PORT:-8000}:8000"]
-    assert cast(ComposeMapping, services["web"])["ports"] == ["${FOUNDER_WEB_PORT:-3000}:3000"]
+    assert cast(ComposeMapping, services["api"])["ports"] == [
+        "0.0.0.0:${FOUNDER_API_PORT:-8000}:8000"
+    ]
+    assert cast(ComposeMapping, services["web"])["ports"] == [
+        "0.0.0.0:${FOUNDER_WEB_PORT:-3000}:3000"
+    ]
     assert "ports" not in cast(ComposeMapping, services["postgres"])
 
 
