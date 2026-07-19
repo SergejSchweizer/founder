@@ -103,23 +103,31 @@ def test_open_backlog_stack_follows_dependency_and_importance_order() -> None:
     assert positions == sorted(positions)
 
 
-def test_backlog_series_completion_gate_lists_required_main_checks() -> None:
+def test_quality_gates_are_documented_centrally() -> None:
     backlog = (REPOSITORY_ROOT / "BACKLOG.md").read_text(encoding="utf-8")
     gate = backlog.split("## Series Completion Gate", maxsplit=1)[1]
+    gates = (REPOSITORY_ROOT / "GATES.md").read_text(encoding="utf-8")
 
-    for required_text in (
+    for backlog_text in (
         "Final branch: `feat/hosted-multitenant-cutover`.",
         "type(optional-scope): subject",
-        "Ruff lint and format",
-        "Pyright strict",
-        "Pytest",
-        "at least 95% coverage",
-        "import-boundary checks",
-        "dataset-schema validation",
-        "API/Web contract tests",
-        "hosted-readiness validation",
+        "[GATES.md](GATES.md)",
     ):
-        assert required_text in gate
+        assert backlog_text in gate
+
+    for gates_text in (
+        "## `pr-quality`",
+        "## `merge-gate`",
+        "## Auto-Merge",
+        "## Branch Protection",
+        "Ruff lint and format",
+        "pyright",
+        "coverage report --fail-under=95",
+        "python -m founder.schema_validation",
+        "python -m founder.architecture_checks",
+        "pytest-xdist: pytest -n auto",
+    ):
+        assert gates_text in gates
 
 
 def test_hosted_security_architecture_maps_goals_to_active_prs() -> None:

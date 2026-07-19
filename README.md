@@ -31,7 +31,7 @@ New contributors should read the documentation in this order:
 2. Read [ARCHITECTURE.md](ARCHITECTURE.md) for the module diagram and one-paragraph purpose of each package module.
 3. Read [CONTRACTS.md](CONTRACTS.md) before changing paths, schemas, or storage formats.
 4. Check [RISKS.md](RISKS.md), [DECISIONS.md](DECISIONS.md), and [BACKLOG.md](BACKLOG.md) before opening a PR-sized change.
-5. Follow [AGENTS.md](AGENTS.md) for workflow rules, PR status tracking, and merge-gate policy.
+5. Follow [AGENTS.md](AGENTS.md) for workflow rules and PR status tracking; use [GATES.md](GATES.md) for quality gates and merge policy.
 
 ## Current Facts
 
@@ -163,6 +163,7 @@ The current refactor target keeps portfolio optimization downstream from the ISI
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) explains how modules connect and where responsibilities live.
 - [CONTRACTS.md](CONTRACTS.md) defines lake layers and table contracts.
+- [GATES.md](GATES.md) documents GitHub quality gates, branch protection, auto-merge, shards, and local validation commands.
 - [DECISIONS.md](DECISIONS.md) records why durable technical choices were made.
 - [RISKS.md](RISKS.md) tracks active project risks and mitigations.
 - [BACKLOG.md](BACKLOG.md) tracks PR-sized work and implementation status.
@@ -531,65 +532,7 @@ YYYY-MM-DDTHH:MM:SSZ LEVEL logger.name message
 
 ## Quality Gates
 
-Founder uses two quality gates. [AGENTS.md](AGENTS.md) is the source of truth for branch protection and merge policy; this section only lists the commands a contributor should run locally.
-
-GitHub Actions runs Lint, Type, Unit, and Integration as independent parallel gates. Unit and
-Integration each run four deterministic file shards, and each shard uses `pytest-xdist` with
-`pytest -n auto`. The fast `pr-quality` aggregate is the required pre-merge check and drives
-same-repository auto-merge. The full `merge-gate` aggregate runs after pushes to `main` so coverage
-and heavier repository checks still validate the merged commit without duplicating the full suite on
-every PR update.
-
-### PR Gate
-
-Run this before every commit, push, or pull request update:
-
-```bash
-uv run founder-quality pr
-```
-
-The local pre-commit hook runs this same PR gate.
-
-### Branch Naming
-
-Create branches as `<type>/<scope>-<short-description>` using lowercase ASCII letters, numbers, and hyphens. Allowed branch types are `feat`, `fix`, `refactor`, `docs`, and `chore`; choose the type that describes the primary purpose of the PR.
-
-### Merge Gate
-
-Run this before a final manual merge candidate, or to reproduce the post-merge `main` gate locally:
-
-```bash
-uv run founder-quality merge
-```
-
-The full main gate requires all of the following checks to pass:
-
-- Ruff lint and format checks.
-- Architecture/import-boundary checks.
-- Pyright strict type checking.
-- Pytest with coverage.
-- At least 95% test coverage.
-- Dataset schema-registry validation.
-
-It also validates Conventional Commit subjects and requires a clean tracked working tree. In GitHub
-Actions, this gate runs after `main` is updated; coverage is collected per Unit and Integration test
-shard, combined, and checked against the same threshold. The equivalent local coverage command is:
-
-```text
-pytest -n auto --cov=founder --cov-report=term-missing --cov-fail-under=95
-```
-
-`uv run founder-quality main` remains a compatibility alias for `uv run founder-quality merge`.
-
-Both layers require Conventional Commit subjects for branch commits. Pull request titles use the same format because the validated title becomes the squash-merge commit subject:
-
-```text
-type(optional-scope): subject
-```
-
-Allowed types are `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, and `test`.
-
-The local pre-commit setup also installs a `commit-msg` hook that validates the commit subject before a commit is accepted. GitHub merge policy is documented in [AGENTS.md](AGENTS.md).
+[GATES.md](GATES.md) is the source of truth for GitHub quality gates, branch protection, auto-merge, shard layout, coverage policy, and local validation commands.
 
 Install dependencies with:
 

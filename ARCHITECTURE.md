@@ -134,7 +134,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 
 `founder.cli` owns command-line entry points. It parses user commands and routes them to repeatable workflows such as `founder dry-run` without embedding business logic in the CLI layer.
 
-`founder.quality` owns repository validation commands. It runs the local PR and main gates used by GitHub workflows. The required pre-merge PR gate covers Ruff lint and format, Pyright strict typing, sharded Pytest, and Conventional Commit validation for branch commits and the final squash subject. The post-merge main gate covers Ruff lint and format, Pyright strict typing, Pytest with at least 95% coverage, Import Linter contracts, dataset schema-registry validation, and working-tree checks.
+`founder.quality` owns repository validation commands. It runs the local PR and main gates used by GitHub workflows. The gate topology, required checks, shard layout, coverage threshold, and auto-merge policy are documented in [GATES.md](GATES.md).
 
 `founder.docs_refresh` owns documentation review reporting. It scans tracked documentation files for review markers and writes `docs/docs_refresh_report.json` so docs-heavy changes can verify that documentation stayed current.
 
@@ -190,7 +190,7 @@ project snapshot pointer is still current.
 - **Evaluation**: Return matrices, asset metrics, portfolio return series, drawdowns, and portfolio metrics consume Gold inputs and stay separate from market-data ingestion. Efficient-frontier points, robust optimization diagnostics, walk-forward backtests, rebalancing simulations, and tail-risk analysis build on that boundary.
 - **Portfolio**: Constraint validation and target weights consume Gold evaluation inputs and stay separate from market-data ingestion.
 - **Trading**: Flatex export helpers turn approved target weights into broker-ready order rows without calling broker APIs.
-- **Validation**: Focused tests first, then the fast pre-merge PR gate for behavior, typing, and formatting. The full coverage, schema, and architecture gate runs after the merge on `main` and remains reproducible locally with `uv run founder-quality merge`.
+- **Validation**: Focused tests first, then the repository quality gates documented in [GATES.md](GATES.md).
 - **Operations**: Long-running jobs can write shared deterministic job manifests alongside compatibility module manifests.
 - **Configuration**: Secrets and local credentials live in ignored local secret files such as `.secrets/eodhd.yaml`, with `.env.local` available for fallback and local tuning.
 - **Logging**: Shared Founder logging writes uniformly formatted `.logs/` files with debug verbosity and retention.
@@ -295,7 +295,7 @@ local adapters that are not authorization evidence for hosted users.
 
 ## Validation Boundary
 
-Validation belongs at module boundaries and repository gates. Module-level tests should prove contracts, paths, and side effects close to the owning code. Repository-level commands and GitHub merge policy are documented in [README.md](README.md) and [AGENTS.md](AGENTS.md), so this architecture document does not repeat the full quality-gate checklist.
+Validation belongs at module boundaries and repository gates. Module-level tests should prove contracts, paths, and side effects close to the owning code. Repository-level commands and GitHub merge policy are documented in [GATES.md](GATES.md), so this architecture document does not repeat the full quality-gate checklist.
 
 ## Update Rules
 
