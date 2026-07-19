@@ -352,7 +352,7 @@ Idempotency: Repeated identical analyses return the existing completed result or
 
 Branch: `chore/docker-compose-postgres-hosted-runtime`.
 
-Git status: in progress. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/140.
 
 Priority: P1 reproducible hosted development environment.
 
@@ -372,7 +372,7 @@ Idempotency: Re-running Compose with unchanged source reuses persistent state an
 
 Branch: `feat/hosted-fastapi-service`.
 
-Git status: not started. PR: TBD.
+Git status: in progress. PR: TBD.
 
 Priority: P1 hosted application service.
 

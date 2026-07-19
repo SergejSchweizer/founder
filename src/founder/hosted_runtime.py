@@ -15,28 +15,11 @@ def health() -> int:
 
 
 def run_api_placeholder() -> int:
-    """Start the API placeholder until the PR96 FastAPI service owns this entry point."""
+    """Start the hosted FastAPI application."""
 
-    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    import uvicorn
 
-    class Handler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802
-            if self.path == "/health":
-                self.send_response(200)
-                self.send_header("content-type", "application/json")
-                self.end_headers()
-                self.wfile.write(b'{"status":"ok"}')
-                return
-            self.send_response(404)
-            self.send_header("content-type", "application/json")
-            self.end_headers()
-            self.wfile.write(b'{"error":"api not implemented"}')
-
-        def log_message(self, format: str, *args: object) -> None:
-            return
-
-    server = ThreadingHTTPServer(("0.0.0.0", 8000), Handler)
-    server.serve_forever()
+    uvicorn.run("founder.hosted_api:app", host="0.0.0.0", port=8000, log_level="info")
     return 0
 
 
