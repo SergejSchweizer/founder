@@ -352,7 +352,7 @@ Idempotency: Repeated identical analyses return the existing completed result or
 
 Branch: `chore/docker-compose-postgres-hosted-runtime`.
 
-Git status: not started. PR: TBD.
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/140.
 
 Priority: P1 reproducible hosted development environment.
 
