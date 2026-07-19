@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "public_hosted_mode": "disabled",
+  "local_only_mode": "available",
+  "backup_contract": "encrypted-separate-from-kek",
+  "key_contract": "restore-requires-kek-version",
+  "decisions": [
+    {
+      "id": "eodhd-storage-and-derived-display-rights",
+      "status": "approved",
+      "owner": "maintainer",
+      "reviewed_on": "2026-07-19",
+      "expires_on": "2027-07-19",
+      "evidence": "docs/security/hosted_readiness.md#eodhd-storage-and-derived-display-rights"
+    },
+    {
+      "id": "personal-license-boundary",
+      "status": "approved",
+      "owner": "maintainer",
+      "reviewed_on": "2026-07-19",
+      "expires_on": "2027-07-19",
+      "evidence": "docs/security/hosted_readiness.md#personal-license-boundary"
+    },
+    {
+      "id": "shared-physical-deduplication",
+      "status": "approved",
+      "owner": "maintainer",
+      "reviewed_on": "2026-07-19",
+      "expires_on": "2027-07-19",
+      "evidence": "docs/security/hosted_readiness.md#shared-physical-deduplication"
+    },
+    {
+      "id": "user-key-backed-grants",
+      "status": "approved",
+      "owner": "maintainer",
+      "reviewed_on": "2026-07-19",
+      "expires_on": "2027-07-19",
+      "evidence": "docs/security/hosted_readiness.md#user-key-backed-grants"
+    },
+    {
+      "id": "retention-and-account-deletion",
+      "status": "approved",
+      "owner": "maintainer",
+      "reviewed_on": "2026-07-19",
+      "expires_on": "2027-07-19",
+      "evidence": "docs/security/hosted_readiness.md#retention-and-account-deletion"
+    },
+    {
+      "id": "gdpr-rights-and-country-coverage",
+      "status": "approved",
+      "owner": "maintainer",
+      "reviewed_on": "2026-07-19",
+      "expires_on": "2027-07-19",
+      "evidence": "docs/security/hosted_readiness.md#gdpr-rights-and-country-coverage"
+    },
+    {
+      "id": "audit-retention-and-incident-response",
+      "status": "approved",
+      "owner": "maintainer",
+      "reviewed_on": "2026-07-19",
+      "expires_on": "2027-07-19",
+      "evidence": "docs/security/hosted_readiness.md#audit-retention-and-incident-response"
+    },
+    {
+      "id": "encrypted-backups-and-restore-drills",
+      "status": "approved",
+      "owner": "maintainer",
+      "reviewed_on": "2026-07-19",
+      "expires_on": "2027-07-19",
+      "evidence": "docs/security/hosted_readiness.md#encrypted-backups-and-restore-drills"
+    },
+    {
+      "id": "kek-recovery-and-rotation",
+      "status": "approved",
+      "owner": "maintainer",
+      "reviewed_on": "2026-07-19",
+      "expires_on": "2027-07-19",
+      "evidence": "docs/security/hosted_readiness.md#kek-recovery-and-rotation"
+    },
+    {
+      "id": "session-key-rotation",
+      "status": "approved",
+      "owner": "maintainer",
+      "reviewed_on": "2026-07-19",
+      "expires_on": "2027-07-19",
+      "evidence": "docs/security/hosted_readiness.md#session-key-rotation"
+    },
+    {
+      "id": "database-role-review",
+      "status": "approved",
+      "owner": "maintainer",
+      "reviewed_on": "2026-07-19",
+      "expires_on": "2027-07-19",
+      "evidence": "docs/security/hosted_readiness.md#database-role-review"
+    },
+    {
+      "id": "no-automatic-broker-execution",
+      "status": "approved",
+      "owner": "maintainer",
+      "reviewed_on": "2026-07-19",
+      "expires_on": "2027-07-19",
+      "evidence": "docs/security/hosted_readiness.md#no-automatic-broker-execution"
+    }
+  ]
+}

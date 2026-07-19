@@ -200,6 +200,12 @@ boundary. They validate synthetic secret detection, deny-by-default runtime arti
 explicit workflow permissions, full-SHA action pins, protected secret names, and the required scanner inventory before PR
 or merge gates can pass.
 
+`founder.hosted_readiness`, `docs/security/hosted_readiness.json`, and `docs/security/hosted_readiness.md` own the PR99
+hosted release-readiness boundary. They encode licensing, privacy, retention, account deletion, encrypted backup,
+restore, KEK recovery, key rotation, database-role, incident-response, and no-automatic-broker-execution decisions.
+Normal CI validates complete records while local-only mode remains available; release cutover can additionally require
+public-hosted mode to pass every approved, unexpired decision.
+
 ## Current Shape
 
 - **Fetch All ISINs**: EODHD exchange symbol-list enumeration stores one irregularly refreshed all-ISIN metadata reference.

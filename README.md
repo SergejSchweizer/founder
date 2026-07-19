@@ -546,6 +546,8 @@ The hosted API is exposed by `founder.hosted_api` and mounted in the API contain
 
 The hosted Web container serves the local research workspace from `apps/web/server.js`. It provides the Google login entrypoint, dashboard, credential settings, download workflow, visible-data coverage, metadata filtering, univariate and bivariate statistics workflow controls, multivariate portfolio analysis, reports, logout, and account-deletion actions. Browser state is derived from API responses, and the Web surface must not store EODHD keys, Google tokens, session tokens, ciphertext, fingerprints, or sensitive API responses in `localStorage`, `sessionStorage`, URLs, analytics, logs, or rendered error output.
 
+Hosted public deployment readiness is described by `docs/security/hosted_readiness.json` and `docs/security/hosted_readiness.md`. Normal quality gates require complete readiness records while local-only mode remains available. Public-hosted release cutover must additionally pass `uv run python -m founder.hosted_readiness --require-public-hosted`.
+
 Install dependencies with:
 
 ```bash

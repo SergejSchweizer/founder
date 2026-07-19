@@ -11,6 +11,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from founder.hosted_readiness import failed_results as failed_readiness_results
+from founder.hosted_readiness import validate_readiness
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 SECURITY_POLICY_PATH = REPOSITORY_ROOT / "docs" / "security" / "hosted_security_policy.json"
 WORKFLOW_ROOT = REPOSITORY_ROOT / ".github" / "workflows"
@@ -178,10 +181,16 @@ def validate_repository_security() -> list[SecurityGateResult]:
     """Run all public-repository security hardening checks."""
 
     policy = load_security_policy()
+    readiness_failures = failed_readiness_results(validate_readiness())
     return [
         *validate_security_policy(policy),
         *validate_workflow_security(),
         *validate_gitignore(),
+        SecurityGateResult(
+            name="readiness.local_gate",
+            passed=not readiness_failures,
+            message="hosted readiness records must be complete while public mode remains disabled",
+        ),
     ]
 
 

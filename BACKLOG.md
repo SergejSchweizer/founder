@@ -412,7 +412,7 @@ Idempotency: Page refresh and navigation reload existing runs and snapshots with
 
 Branch: `chore/public-repo-security-hardening`.
 
-Git status: in progress. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/145.
 
 Priority: P0 before public deployment.
 
@@ -432,7 +432,7 @@ Idempotency: Re-running scans against unchanged source produces the same policy 
 
 Branch: `docs/hosted-readiness-security-gate`.
 
-Git status: not started. PR: TBD.
+Git status: in progress. PR: TBD.
 
 Priority: P0 public-hosting release gate.
 
