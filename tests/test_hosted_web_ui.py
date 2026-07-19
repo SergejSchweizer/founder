@@ -6,6 +6,7 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 WEB_SERVER = REPOSITORY_ROOT / "apps" / "web" / "server.js"
 WEB_PACKAGE = REPOSITORY_ROOT / "apps" / "web" / "package.json"
+WEB_DOCKERFILE = REPOSITORY_ROOT / "apps" / "web" / "Dockerfile"
 
 
 def _web_source() -> str:
@@ -18,17 +19,83 @@ def test_web_shell_exposes_user_research_funnel_surfaces() -> None:
     for expected in (
         "Google Login",
         "Dashboard",
+        "Projects",
+        "Data",
         "Credentials",
         "Downloads",
+        "Metadata",
         "Metadata Filter",
         "Univariate Statistics",
         "Univariate Filter",
+        "Diversification",
         "Bivariate Statistics",
         "Multivariate Statistics",
+        "Portfolio",
         "Portfolio Analysis",
+        "Validation",
+        "Report",
+        "Settings",
         "Delete Account Data",
     ):
         assert expected in source
+
+
+def test_web_shell_defines_versioned_design_system_and_route_skeletons() -> None:
+    source = _web_source()
+
+    assert 'data-design-system-version="founder-web-shell-v1"' in source
+    for token in (
+        "typography",
+        "spacing",
+        "color",
+        "radius",
+        "--page-title",
+        "--section-title",
+        "--canvas",
+        "--surface",
+        "--focus",
+        "@media (prefers-reduced-motion: reduce)",
+    ):
+        assert token in source
+
+    for route in (
+        "dashboard",
+        "projects",
+        "data",
+        "metadata",
+        "univariate",
+        "filter",
+        "diversification",
+        "portfolio",
+        "validation",
+        "report",
+        "settings",
+    ):
+        assert f'id: "{route}"' in source
+
+    assert 'data-route-skeleton="${route.id}"' in source
+
+
+def test_web_shell_models_complete_funnel_order_and_status_states() -> None:
+    source = _web_source()
+
+    positions = [
+        source.index(f'id: "{step}"')
+        for step in (
+            "data",
+            "metadata",
+            "univariate",
+            "filter",
+            "diversification",
+            "portfolio",
+            "validation",
+            "report",
+        )
+    ]
+    assert positions == sorted(positions)
+
+    for state in ("not-started", "ready", "running", "complete", "warning", "failed", "stale"):
+        assert f'status: "{state}"' in source or f"funnel-step--{state}" in source
 
 
 def test_web_shell_keeps_secret_inputs_write_only_and_uses_google_entrypoint() -> None:
@@ -81,3 +148,8 @@ def test_web_package_remains_local_container_runnable_without_external_calls() -
     assert package["private"] is True
     assert package["scripts"]["start"] == "node server.js"
     assert package["dependencies"] == {}
+
+    dockerfile = WEB_DOCKERFILE.read_text(encoding="utf-8")
+    assert "COPY apps/web/package.json ./" in dockerfile
+    assert "COPY apps/web/server.js ./" in dockerfile
+    assert 'CMD ["node", "server.js"]' in dockerfile
