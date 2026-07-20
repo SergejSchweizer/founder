@@ -42,6 +42,9 @@ def test_web_shell_exposes_user_research_funnel_surfaces() -> None:
     assert "data-project-selector" in source
     assert "data-project-tree-items" in source
     assert "data-project-workspace hidden" in source
+    assert "Project Definition" in source
+    assert "Create New Project" in source
+    assert 'data-form="project-definition"' in source
 
 
 def test_dashboard_shell_is_gated_until_authenticated_session() -> None:
@@ -173,6 +176,8 @@ def test_web_shell_consumes_api_contracts_with_csrf_and_idempotency_helpers() ->
         "/downloads/run",
         "/projects",
         "/selections",
+        "/metadata-filter/options",
+        "/metadata-filter/projects",
         "/analyses",
         "/account",
     ):
@@ -185,10 +190,19 @@ def test_web_shell_uses_project_scoped_navigation_and_empty_snapshot_state() -> 
     for expected in (
         "let projectState =",
         "refreshProjects()",
+        "refreshMetadataFilterOptions()",
         "normalizeProjectItems(payload)",
         "renderProjectOptions()",
         "renderProjectNavigation()",
         "selectProject(projectId)",
+        "projectDefinitionPayload(form)",
+        "apiRoutes.metadataFilterProjects",
+        "data-metadata-option",
+        'name="exchange"',
+        'name="name" placeholder="UCITS ETF"',
+        'name="instrument_type"',
+        'name="country"',
+        'name="currency"',
         "selectedProject()",
         "clientEscapeHtml(projectLabel(project))",
         'document.querySelector("[data-project-selector]")',

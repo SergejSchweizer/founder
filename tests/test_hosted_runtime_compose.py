@@ -34,6 +34,9 @@ def test_compose_defines_persistent_internal_postgres_and_shared_data() -> None:
     assert "5432" in postgres["expose"]
     assert "founder-postgres-data:/var/lib/postgresql/data" in postgres["volumes"]
     assert "founder-shared-data:/srv/founder/shared-data" in api["volumes"]
+    assert "./lake:/srv/founder/lake:ro" in api["volumes"]
+    assert api["environment"]["FOUNDER_LAKE_ROOT"] == "/srv/founder/lake"
+    assert api["group_add"] == ["${FOUNDER_LAKE_GROUP_ID:-10}"]
 
 
 def test_compose_exposes_only_api_and_web_development_ports() -> None:
