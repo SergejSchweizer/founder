@@ -590,11 +590,36 @@ h2 { font-size: var(--section-title); font-weight: 700; letter-spacing: 0; }
 .project-empty-state {
   min-height: 360px;
   display: grid;
-  align-content: center;
+  align-content: start;
   justify-items: center;
-  gap: 8px;
+  gap: 14px;
   color: var(--muted);
   text-align: center;
+  padding: 28px 0;
+}
+.project-definition {
+  width: min(760px, 100%);
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  padding: 18px;
+  text-align: left;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, .16);
+}
+.project-definition__header {
+  display: grid;
+  gap: 4px;
+}
+.project-definition__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.project-definition__actions button {
+  min-width: 220px;
+  min-height: 46px;
+  font-weight: 700;
 }
 .project-workspace[hidden] {
   display: none !important;
@@ -725,7 +750,24 @@ function renderAuthenticatedShell(escapedApiUrl, session = null) {
 
     <section class="project-empty-state" data-project-empty-state>
       <h2>No project selected</h2>
-      <p>Select a project from Project Snapshot to load its workspace.</p>
+      <p>Select a project from Project Snapshot or define a new ISIN search project.</p>
+      <form class="project-definition" data-form="project-definition">
+        <div class="project-definition__header">
+          <h2>Project Definition</h2>
+          <p class="subtle">Filter the all-ISIN metadata universe and create a project from the resulting list.</p>
+        </div>
+        <div class="field-grid">
+          <label>Exchange<select name="exchange" data-metadata-option="exchange"><option value="">Any</option></select></label>
+          <label>Name<input name="name" placeholder="UCITS ETF"></label>
+          <label>Instrument Type<select name="instrument_type" data-metadata-option="instrument_type"><option value="">Any</option></select></label>
+          <label>Country<select name="country" data-metadata-option="country"><option value="">Any</option></select></label>
+          <label>Currency<select name="currency" data-metadata-option="currency"><option value="">Any</option></select></label>
+        </div>
+        <div class="project-definition__actions">
+          <button class="primary" type="submit" data-action="create-metadata-project">Create New Project</button>
+        </div>
+        <p class="subtle" data-project-definition-status></p>
+      </form>
     </section>
 
     <section class="project-workspace" data-project-workspace hidden>
@@ -862,6 +904,8 @@ const apiRoutes = {
   downloadRun: "/downloads/run",
   projects: "/projects",
   selections: "/selections",
+  metadataFilterOptions: "/metadata-filter/options",
+  metadataFilterProjects: "/metadata-filter/projects",
   analyses: "/analyses",
   account: "/account"
 };
@@ -926,6 +970,37 @@ function projectLabel(project) {
 }
 function selectedProject() {
   return projectState.projects.find((project) => project.project_id === projectState.selectedProjectId) || null;
+}
+function optionMarkup(value) {
+  return '<option value="' + clientEscapeHtml(value) + '">' + clientEscapeHtml(value) + "</option>";
+}
+function setProjectDefinitionStatus(message) {
+  const target = document.querySelector("[data-project-definition-status]");
+  if (target) target.textContent = message;
+}
+function projectDefinitionPayload(form) {
+  const data = new FormData(form);
+  return {
+    exchange: String(data.get("exchange") || ""),
+    name: String(data.get("name") || ""),
+    instrument_type: String(data.get("instrument_type") || ""),
+    country: String(data.get("country") || ""),
+    currency: String(data.get("currency") || "")
+  };
+}
+async function refreshMetadataFilterOptions() {
+  let payload = {};
+  try {
+    payload = await apiRequest(apiRoutes.metadataFilterOptions);
+  } catch (_error) {
+    setProjectDefinitionStatus("Metadata options are not available.");
+  }
+  for (const field of ["exchange", "instrument_type", "country", "currency"]) {
+    const select = document.querySelector('[data-metadata-option="' + field + '"]');
+    if (!select) continue;
+    const values = Array.isArray(payload[field]) ? payload[field] : [];
+    select.innerHTML = '<option value="">Any</option>' + values.map(optionMarkup).join("");
+  }
 }
 function renderProjectOptions() {
   const selector = document.querySelector("[data-project-selector]");
@@ -1002,6 +1077,7 @@ function mountAuthenticatedShell(session) {
   }
   if (gate) gate.hidden = true;
   bindAuthenticatedHandlers();
+  void refreshMetadataFilterOptions();
   void refreshProjects();
 }
 function showLoginGate() {
@@ -1032,6 +1108,25 @@ if (authenticatedHandlersBound) return;
 authenticatedHandlersBound = true;
 document.querySelector("[data-project-selector]").addEventListener("change", (event) => {
   selectProject(event.currentTarget.value);
+});
+document.querySelector('[data-form="project-definition"]').addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  setProjectDefinitionStatus("Creating project...");
+  try {
+    const created = await apiRequest(apiRoutes.metadataFilterProjects, {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey("metadata-project") },
+      body: projectDefinitionPayload(form)
+    });
+    await refreshProjects();
+    if (created && created.project && created.project.project_id) {
+      selectProject(created.project.project_id);
+      setProjectDefinitionStatus("Created " + created.project.name + " with " + created.selected_count + " listings.");
+    }
+  } catch (_error) {
+    setProjectDefinitionStatus("Choose at least one filter with matching ISINs.");
+  }
 });
 document.querySelector('[data-form="credential"]').addEventListener("submit", async (event) => {
   event.preventDefault();

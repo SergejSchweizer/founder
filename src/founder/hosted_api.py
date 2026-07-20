@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Protocol
 
 from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request, status
@@ -28,7 +30,9 @@ from founder.hosted_credentials import (
     InMemoryCredentialStore,
     KeyEncryptionKey,
 )
-from founder.table_io import JsonRow
+from founder.paths import LakePaths
+from founder.selection_filters import Predicate, filter_rows
+from founder.table_io import JsonRow, read_rows
 
 SESSION_COOKIE_NAME = "founder_session_user"
 CSRF_COOKIE_NAME = "founder_csrf"
@@ -56,6 +60,16 @@ class ProjectCreateRequest(BaseModel):
     """Request to create one user-owned project."""
 
     name: str = Field(min_length=1, max_length=120)
+
+
+class MetadataFilterProjectRequest(BaseModel):
+    """Request to create one project from metadata-filter criteria."""
+
+    exchange: str = Field(default="", max_length=80)
+    name: str = Field(default="", max_length=240)
+    instrument_type: str = Field(default="", max_length=80)
+    country: str = Field(default="", max_length=80)
+    currency: str = Field(default="", max_length=80)
 
 
 class SelectionCreateRequest(BaseModel):
@@ -149,6 +163,7 @@ class HostedApiState:
         default_factory=lambda: dict[tuple[str, str, str], str]()
     )
     audit_events: list[JsonRow] = field(default_factory=lambda: list[JsonRow]())
+    all_isins_rows: tuple[JsonRow, ...] = field(default_factory=tuple)
 
     def credential_vault(self) -> EodhdCredentialVault:
         """Return a deterministic local credential vault."""
@@ -380,6 +395,81 @@ def create_app(state: HostedApiState | None = None) -> FastAPI:
         ]
         return {"items": _page(items, limit=limit, offset=offset)}
 
+    @app.get("/metadata-filter/options")
+    def metadata_filter_options(
+        user: ApiUser = Depends(current_user),
+        api_state: HostedApiState = Depends(current_state),
+    ) -> JsonRow:
+        _ = user
+        rows = _all_isins_rows(api_state)
+        return {
+            "exchange": _distinct_options(rows, "exchange"),
+            "instrument_type": _distinct_options(rows, "instrument_type"),
+            "country": _distinct_options(rows, "country"),
+            "currency": _distinct_options(rows, "currency"),
+        }
+
+    @app.post("/metadata-filter/projects")
+    def create_metadata_filter_project(
+        payload: MetadataFilterProjectRequest,
+        user: ApiUser = Depends(csrf_user),
+        api_state: HostedApiState = Depends(current_state),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> JsonRow:
+        predicates = _metadata_filter_predicates(payload)
+        if not predicates:
+            raise _http_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "metadata_filter_required")
+        selected_rows = filter_rows(_all_isins_rows(api_state), predicates)
+        if not selected_rows:
+            raise _http_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "metadata_filter_empty")
+        project_name = _metadata_filter_project_name(payload)
+        cached_project_id = _idempotent_response(
+            api_state,
+            user_id=user.user_id,
+            operation=f"metadata-filter-project:{project_name}",
+            idempotency_key=idempotency_key,
+        )
+        if cached_project_id is not None:
+            project = api_state.projects_by_id[cached_project_id]
+            selection = _selection_for_project(api_state, project.project_id, user.user_id)
+            return _metadata_filter_project_row(project, selection, len(selected_rows))
+        project_id = _opaque_id("project", f"{user.user_id}:{project_name}")
+        project = ProjectRecord(project_id=project_id, user_id=user.user_id, name=project_name)
+        api_state.projects_by_id.setdefault(project_id, project)
+        member_ids = tuple(
+            sorted(
+                {
+                    f"{row['isin']}:{row['exchange']}:{row['code']}"
+                    for row in selected_rows
+                    if row.get("isin") and row.get("exchange") and row.get("code")
+                }
+            )
+        )
+        selection_id = _opaque_id(
+            "selection", f"{user.user_id}:{project_id}:{project_name}:{member_ids}"
+        )
+        selection = SelectionRecord(
+            selection_id=selection_id,
+            user_id=user.user_id,
+            project_id=project_id,
+            name=project_name,
+            member_ids=member_ids,
+        )
+        api_state.selections_by_id.setdefault(selection_id, selection)
+        _remember_idempotency(
+            api_state,
+            user.user_id,
+            f"metadata-filter-project:{project_name}",
+            idempotency_key,
+            project_id,
+        )
+        _audit(api_state, user.user_id, "metadata_filter.project.create")
+        return _metadata_filter_project_row(
+            api_state.projects_by_id[project_id],
+            api_state.selections_by_id[selection_id],
+            len(selected_rows),
+        )
+
     @app.post("/selections")
     def create_selection(
         payload: SelectionCreateRequest,
@@ -531,6 +621,67 @@ def create_app(state: HostedApiState | None = None) -> FastAPI:
         return {"status": "deleted"}
 
     return app
+
+
+def _all_isins_rows(state: HostedApiState) -> tuple[JsonRow, ...]:
+    if state.all_isins_rows:
+        return state.all_isins_rows
+    lake_root = Path(os.environ.get("FOUNDER_LAKE_ROOT", "lake"))
+    return tuple(read_rows(LakePaths(root=lake_root).all_isins()))
+
+
+def _distinct_options(rows: tuple[JsonRow, ...], field: str) -> list[str]:
+    return sorted(
+        {str(row.get(field, "")).strip() for row in rows if str(row.get(field, "")).strip()}
+    )
+
+
+def _metadata_filter_predicates(payload: MetadataFilterProjectRequest) -> tuple[Predicate, ...]:
+    predicates: list[Predicate] = []
+    if payload.exchange.strip():
+        predicates.append(Predicate("exchange", "=", payload.exchange.strip()))
+    if payload.name.strip():
+        predicates.append(Predicate("name", "~", payload.name.strip()))
+    if payload.instrument_type.strip():
+        predicates.append(Predicate("instrument_type", "=", payload.instrument_type.strip()))
+    if payload.country.strip():
+        predicates.append(Predicate("country", "=", payload.country.strip()))
+    if payload.currency.strip():
+        predicates.append(Predicate("currency", "=", payload.currency.strip()))
+    return tuple(predicates)
+
+
+def _metadata_filter_project_name(payload: MetadataFilterProjectRequest) -> str:
+    parts = [
+        payload.exchange,
+        payload.name,
+        payload.instrument_type,
+        payload.country,
+        payload.currency,
+    ]
+    normalized = [_project_name_part(part) for part in parts if _project_name_part(part)]
+    return "_".join(normalized) or "metadata_filter_project"
+
+
+def _project_name_part(value: str) -> str:
+    return "_".join(str(value).strip().casefold().split())
+
+
+def _selection_for_project(state: HostedApiState, project_id: str, user_id: str) -> SelectionRecord:
+    for selection in state.selections_by_id.values():
+        if selection.project_id == project_id and selection.user_id == user_id:
+            return selection
+    raise _http_error(status.HTTP_404_NOT_FOUND, "not_found")
+
+
+def _metadata_filter_project_row(
+    project: ProjectRecord, selection: SelectionRecord, selected_count: int
+) -> JsonRow:
+    return {
+        "project": _project_row(project),
+        "selection": _selection_row(selection),
+        "selected_count": selected_count,
+    }
 
 
 def _credential_status_row(status_row: CredentialStatus) -> JsonRow:

@@ -7,8 +7,8 @@ from fastapi.testclient import TestClient
 from founder.hosted_api import CSRF_COOKIE_NAME, SESSION_COOKIE_NAME, HostedApiState, create_app
 
 
-def _client() -> TestClient:
-    return TestClient(create_app(HostedApiState()))
+def _client(state: HostedApiState | None = None) -> TestClient:
+    return TestClient(create_app(state or HostedApiState()))
 
 
 def _headers(
@@ -142,6 +142,78 @@ def test_downloads_publish_visible_user_datasets_and_are_idempotent() -> None:
     assert run["observation_count"] == 2
     assert len(datasets["items"]) == 2
     assert other_datasets["items"] == []
+
+
+def test_metadata_filter_options_and_project_creation_use_all_isins_reference() -> None:
+    state = HostedApiState(
+        all_isins_rows=(
+            {
+                "isin": "IE1",
+                "exchange": "XETRA",
+                "code": "AAA",
+                "name": "Example UCITS ETF",
+                "instrument_type": "ETF",
+                "country": "IE",
+                "currency": "EUR",
+                "source_exchange": "XETRA",
+                "fetched_at": "2026-01-01T00:00:00+00:00",
+            },
+            {
+                "isin": "US1",
+                "exchange": "NYSE",
+                "code": "BBB",
+                "name": "Example Stock",
+                "instrument_type": "Common Stock",
+                "country": "US",
+                "currency": "USD",
+                "source_exchange": "NYSE",
+                "fetched_at": "2026-01-01T00:00:00+00:00",
+            },
+        )
+    )
+    client = _client(state)
+
+    options = _json(client.get("/metadata-filter/options", headers=_headers(csrf=False)))
+    created = _json(
+        client.post(
+            "/metadata-filter/projects",
+            headers=_headers(idempotency="metadata-project-1"),
+            json={
+                "exchange": "XETRA",
+                "name": "UCITS ETF",
+                "instrument_type": "ETF",
+                "country": "IE",
+                "currency": "EUR",
+            },
+        )
+    )
+    repeated = _json(
+        client.post(
+            "/metadata-filter/projects",
+            headers=_headers(idempotency="metadata-project-1"),
+            json={
+                "exchange": "XETRA",
+                "name": "UCITS ETF",
+                "instrument_type": "ETF",
+                "country": "IE",
+                "currency": "EUR",
+            },
+        )
+    )
+
+    assert options == {
+        "country": ["IE", "US"],
+        "currency": ["EUR", "USD"],
+        "exchange": ["NYSE", "XETRA"],
+        "instrument_type": ["Common Stock", "ETF"],
+    }
+    assert created == repeated
+    assert created["project"]["name"] == "xetra_ucits_etf_etf_ie_eur"
+    assert created["selection"]["member_ids"] == ["IE1:XETRA:AAA"]
+    assert created["selected_count"] == 1
+    assert _json(client.get("/projects", headers=_headers(csrf=False)))["items"] == [
+        created["project"]
+    ]
 
 
 def test_projects_selections_and_analyses_are_user_scoped_and_paginated() -> None:
