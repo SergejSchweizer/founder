@@ -677,13 +677,13 @@ def _metadata_filter_predicates(payload: MetadataFilterProjectRequest) -> tuple[
 
 def _metadata_filter_project_name(payload: MetadataFilterProjectRequest) -> str:
     parts = [
-        payload.exchange,
-        payload.name,
-        payload.instrument_type,
-        payload.country,
-        payload.currency,
+        _project_name_part(payload.exchange),
+        f"name_{_project_name_part(payload.name)}" if _project_name_part(payload.name) else "",
+        _project_name_part(payload.instrument_type),
+        _project_name_part(payload.country),
+        _project_name_part(payload.currency),
     ]
-    normalized = [_project_name_part(part) for part in parts if _project_name_part(part)]
+    normalized = [part for part in parts if part]
     return "_".join(normalized) or "metadata_filter_project"
 
 
