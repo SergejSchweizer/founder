@@ -393,9 +393,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   outline-offset: 2px;
 }
 .app-shell {
+  --sidebar-width: 280px;
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width) 8px minmax(0, 1fr);
 }
 .login-gate {
   min-height: 100vh;
@@ -431,6 +432,21 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   padding: 18px;
   display: flex;
   flex-direction: column;
+}
+.sidebar-resizer {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  cursor: col-resize;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid transparent;
+  border-right: 1px solid transparent;
+  padding: 0;
+}
+.sidebar-resizer:hover, .sidebar-resizer:focus-visible, .app-shell--resizing .sidebar-resizer {
+  background: #e8f0fe;
+  border-color: var(--accent);
 }
 .brand {
   display: flex;
@@ -760,6 +776,7 @@ pre {
 }
 @media (max-width: 1040px) {
   .app-shell { grid-template-columns: 1fr; }
+  .sidebar-resizer { display: none; }
   .sidebar {
     position: static;
     height: auto;
@@ -805,6 +822,7 @@ function renderAuthenticatedShell(escapedApiUrl, session = null) {
       <a href="/auth/logout"><button type="button" data-action="google-auth">Google Auth</button></a>
     </div>
   </aside>
+  <button class="sidebar-resizer" type="button" data-sidebar-resizer aria-label="Resize sidebar" aria-orientation="vertical" aria-valuemin="220" aria-valuemax="520" aria-valuenow="280"></button>
   <main class="workspace">
     <header class="topbar">
       <div>
@@ -1296,9 +1314,60 @@ async function initializeAuthGate() {
   showLoginGate();
 }
 let authenticatedHandlersBound = false;
+const sidebarWidthBounds = { min: 220, max: 520, step: 16 };
+function clampSidebarWidth(width) {
+  return Math.max(sidebarWidthBounds.min, Math.min(sidebarWidthBounds.max, width));
+}
+function setSidebarWidth(width) {
+  const shell = document.querySelector(".app-shell");
+  const resizer = document.querySelector("[data-sidebar-resizer]");
+  const nextWidth = clampSidebarWidth(width);
+  if (shell) shell.style.setProperty("--sidebar-width", nextWidth + "px");
+  if (resizer) resizer.setAttribute("aria-valuenow", String(nextWidth));
+}
+function currentSidebarWidth() {
+  const sidebar = document.querySelector(".sidebar");
+  return sidebar ? sidebar.getBoundingClientRect().width : 280;
+}
+function bindSidebarResizer() {
+  const resizer = document.querySelector("[data-sidebar-resizer]");
+  const shell = document.querySelector(".app-shell");
+  if (!resizer || !shell) return;
+  resizer.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    resizer.setPointerCapture(event.pointerId);
+    shell.classList.add("app-shell--resizing");
+  });
+  resizer.addEventListener("pointermove", (event) => {
+    if (!resizer.hasPointerCapture(event.pointerId)) return;
+    setSidebarWidth(event.clientX);
+  });
+  function endResize(event) {
+    if (resizer.hasPointerCapture(event.pointerId)) resizer.releasePointerCapture(event.pointerId);
+    shell.classList.remove("app-shell--resizing");
+  }
+  resizer.addEventListener("pointerup", endResize);
+  resizer.addEventListener("pointercancel", endResize);
+  resizer.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      setSidebarWidth(currentSidebarWidth() - sidebarWidthBounds.step);
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      setSidebarWidth(currentSidebarWidth() + sidebarWidthBounds.step);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setSidebarWidth(sidebarWidthBounds.min);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setSidebarWidth(sidebarWidthBounds.max);
+    }
+  });
+}
 function bindAuthenticatedHandlers() {
 if (authenticatedHandlersBound) return;
 authenticatedHandlersBound = true;
+bindSidebarResizer();
 document.querySelector('[data-form="eodhd-fetch"]').addEventListener("submit", async (event) => {
   event.preventDefault();
   try {

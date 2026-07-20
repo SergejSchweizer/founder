@@ -97,6 +97,17 @@ def test_web_shell_defines_versioned_design_system_and_route_skeletons() -> None
     assert 'class="nav-dot"' not in source
     assert "projectNavigationMarkup()" in source
     assert 'aria-label="Project routes"' in source
+    assert "data-sidebar-resizer" in source
+    assert 'aria-label="Resize sidebar"' in source
+    assert "--sidebar-width" in source
+    assert "grid-template-columns: var(--sidebar-width) 8px minmax(0, 1fr)" in source
+    assert "bindSidebarResizer()" in source
+    assert "setSidebarWidth(width)" in source
+    assert "clampSidebarWidth(width)" in source
+    assert 'event.key === "ArrowLeft"' in source
+    assert 'event.key === "ArrowRight"' in source
+    assert "pointerdown" in source
+    assert "pointermove" in source
 
     assert 'data-route-skeleton="${route.id}"' in source
 
