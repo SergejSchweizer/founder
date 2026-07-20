@@ -395,6 +395,27 @@ def create_app(state: HostedApiState | None = None) -> FastAPI:
         ]
         return {"items": _page(items, limit=limit, offset=offset)}
 
+    @app.delete("/projects/{project_id}")
+    def delete_project(
+        project_id: str,
+        user: ApiUser = Depends(csrf_user),
+        api_state: HostedApiState = Depends(current_state),
+    ) -> JsonRow:
+        _require_user_row(api_state.projects_by_id, project_id, user.user_id)
+        api_state.projects_by_id.pop(project_id, None)
+        api_state.selections_by_id = {
+            row_id: row
+            for row_id, row in api_state.selections_by_id.items()
+            if row.project_id != project_id or row.user_id != user.user_id
+        }
+        api_state.analyses_by_id = {
+            row_id: row
+            for row_id, row in api_state.analyses_by_id.items()
+            if row.project_id != project_id or row.user_id != user.user_id
+        }
+        _audit(api_state, user.user_id, "project.delete")
+        return {"status": "deleted", "project_id": project_id}
+
     @app.get("/metadata-filter/options")
     def metadata_filter_options(
         user: ApiUser = Depends(current_user),

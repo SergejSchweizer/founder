@@ -349,6 +349,23 @@ def test_projects_selections_and_analyses_are_user_scoped_and_paginated() -> Non
         ).status_code
         == 404
     )
+    assert (
+        client.delete(f"/projects/{project['project_id']}", headers=_headers("user-b")).status_code
+        == 404
+    )
+    deleted_project = _json(client.delete(f"/projects/{project['project_id']}", headers=_headers()))
+    assert deleted_project == {"project_id": project["project_id"], "status": "deleted"}
+    assert _json(client.get("/projects", headers=_headers(csrf=False)))["items"] == []
+    assert (
+        client.get(
+            f"/selections/{selection['selection_id']}", headers=_headers(csrf=False)
+        ).status_code
+        == 404
+    )
+    assert (
+        client.get(f"/analyses/{analysis['run_id']}", headers=_headers(csrf=False)).status_code
+        == 404
+    )
     assert client.get("/projects?limit=0", headers=_headers(csrf=False)).status_code == 422
 
 

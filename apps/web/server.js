@@ -503,13 +503,18 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   border-left: 1px solid var(--line);
   margin-left: 10px;
 }
-.project-tree__empty, .project-tree__item {
+.project-tree__empty, .project-tree__row {
   min-height: 32px;
   display: flex;
   align-items: center;
   border-radius: var(--radius-control);
   color: var(--muted);
   font-size: var(--meta);
+}
+.project-tree__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  gap: 4px;
 }
 .project-tree__item {
   border: 0;
@@ -522,6 +527,25 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .project-tree__item:hover, .project-tree__item[aria-current="page"] {
   background: #e8f0fe;
   color: var(--accent);
+}
+.project-tree__delete {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-control);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--muted);
+}
+.project-tree__delete:hover {
+  background: #fce8e6;
+  color: var(--danger);
+}
+.project-tree__delete svg {
+  width: 16px;
+  height: 16px;
 }
 .sidebar-auth {
   margin-top: auto;
@@ -935,6 +959,7 @@ const apiRoutes = {
   downloadPlan: "/downloads/plan",
   downloadRun: "/downloads/run",
   projects: "/projects",
+  project: (projectId) => "/projects/" + encodeURIComponent(projectId),
   selections: "/selections",
   metadataFilterFetchAllIsins: "/metadata-filter/fetch-all-isins",
   metadataFilterOptions: "/metadata-filter/options",
@@ -1159,13 +1184,35 @@ function renderProjectNavigation() {
   empty.hidden = projectState.projects.length > 0;
   items.innerHTML = projectState.projects.map((project) => {
     const current = project.project_id === projectState.selectedProjectId ? ' aria-current="page"' : "";
-    return '<button class="project-tree__item" type="button" data-project-id="'
+    return '<div class="project-tree__row">'
+      + '<button class="project-tree__item" type="button" data-project-id="'
       + clientEscapeHtml(project.project_id) + '"' + current + ">"
-      + clientEscapeHtml(projectLabel(project)) + "</button>";
+      + clientEscapeHtml(projectLabel(project)) + "</button>"
+      + '<button class="project-tree__delete" type="button" data-delete-project-id="'
+      + clientEscapeHtml(project.project_id) + '" aria-label="Delete project '
+      + clientEscapeHtml(projectLabel(project)) + '">'
+      + '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+      + '<path d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2l1 11h4l1-11h2l-1 13H8L7 9z" fill="currentColor"/>'
+      + "</svg></button></div>";
   }).join("");
   for (const button of items.querySelectorAll("[data-project-id]")) {
     button.addEventListener("click", () => selectProject(button.dataset.projectId || ""));
   }
+  for (const button of items.querySelectorAll("[data-delete-project-id]")) {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void deleteProject(button.dataset.deleteProjectId || "");
+    });
+  }
+}
+async function deleteProject(projectId) {
+  if (!projectId || !projectState.metadataReady) return;
+  await apiRequest(apiRoutes.project(projectId), {
+    method: "DELETE",
+    headers: { "Idempotency-Key": idempotencyKey("delete-project") }
+  });
+  if (projectState.selectedProjectId === projectId) projectState.selectedProjectId = "";
+  await refreshProjects();
 }
 function selectProject(projectId) {
   projectState.selectedProjectId = projectId;
