@@ -149,7 +149,8 @@ def test_web_shell_keeps_secret_inputs_write_only_and_uses_google_entrypoint() -
     assert 'name="provider_key" type="password"' in source
     assert 'autocomplete="new-password"' in source
     assert 'data-action="fetch-all-isins"' in source
-    assert "masked_label" not in source
+    assert "status.masked_label" in source
+    assert 'input.dataset.credentialDisplay === "masked"' in source
     assert "ciphertext" not in source
     assert "fingerprint" not in source
 
@@ -200,11 +201,14 @@ def test_web_shell_uses_project_scoped_navigation_and_empty_snapshot_state() -> 
         "setProjectGateEnabled(false)",
         "setProjectGateEnabled(true)",
         "refreshEodhdCredentialStatus()",
-        "setEodhdCredentialSaved(saved)",
         'status && status.status === "active"',
+        'setEodhdCredentialSaved(saved, saved ? String(status.masked_label || "") : "")',
         "projectState.eodhdCredentialSaved",
         "Saved EODHD key available",
         "Projects restored for this user.",
+        "input.value = maskedLabel",
+        'input.dataset.credentialDisplay = "masked"',
+        'if (input && input.dataset.credentialDisplay === "masked") return "";',
         "await refreshMetadataFilterOptions();\n      await refreshProjects();",
         "if (providerKey) {",
         "fetchAllIsinsForProjects",

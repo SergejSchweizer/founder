@@ -1013,11 +1013,18 @@ function setEodhdFetchStatus(message) {
 function eodhdKeyInput() {
   return document.querySelector('[data-form="eodhd-fetch"] [name="provider_key"]');
 }
-function setEodhdCredentialSaved(saved) {
+function setEodhdCredentialSaved(saved, maskedLabel = "") {
   projectState.eodhdCredentialSaved = saved;
   const input = eodhdKeyInput();
   if (input) {
     input.placeholder = saved ? "Saved EODHD key available" : "Paste EODHD API key";
+    if (saved && maskedLabel && (!input.value || input.dataset.credentialDisplay === "masked")) {
+      input.value = maskedLabel;
+      input.dataset.credentialDisplay = "masked";
+    }
+    if (!saved) {
+      delete input.dataset.credentialDisplay;
+    }
   }
   updateFetchButtonState();
 }
@@ -1047,6 +1054,7 @@ function setProjectGateEnabled(enabled) {
 }
 function eodhdKeyValue() {
   const input = eodhdKeyInput();
+  if (input && input.dataset.credentialDisplay === "masked") return "";
   return input ? String(input.value || "").trim() : "";
 }
 function updateFetchButtonState() {
@@ -1067,7 +1075,7 @@ async function refreshEodhdCredentialStatus() {
   try {
     const status = await apiRequest(apiRoutes.credential);
     const saved = status && status.status === "active";
-    setEodhdCredentialSaved(saved);
+    setEodhdCredentialSaved(saved, saved ? String(status.masked_label || "") : "");
     if (saved) {
       setProjectGateEnabled(true);
       await refreshMetadataFilterOptions();
@@ -1254,6 +1262,7 @@ document.querySelector('[data-form="eodhd-fetch"]').addEventListener("submit", a
   }
 });
 document.querySelector('[data-form="eodhd-fetch"] [name="provider_key"]').addEventListener("input", () => {
+  delete eodhdKeyInput().dataset.credentialDisplay;
   updateFetchButtonState();
 });
 document.querySelector("[data-project-selector]").addEventListener("change", (event) => {
