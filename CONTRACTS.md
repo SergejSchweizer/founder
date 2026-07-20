@@ -73,7 +73,7 @@ silver/coverage/quote_gaps.parquet
 - `quote_gaps`: quote gap ranges by ISIN, code, exchange, symbol, data type, gap type, start, end, and missing trading-day count. Gap-aware Bronze downloads historical gaps first, then the tail to the selected run date.
 - `errors`: non-secret bronze error records.
 - `returns`, `correlation`, and `covariance`: Gold risk-input tables built from validated Silver quote rows and written as per-ISIN files without year partitions. Gold return rows use daily adjusted-close log returns: `ln(P_t / P_{t-1})`, plus a `simple_return` field, `(P_t / P_{t-1}) - 1`, used for wealth simulation instead of log-return compounding. Prices that are non-positive or repeat an earlier date are quarantined by `founder.return_quality` and excluded from both fields rather than becoming a fabricated zero return. Pairwise correlation and covariance values are computed only on the common date intersection of the two return series.
-- `univariate_statistics`: one Gold row per ISIN listing, written to a stable listing path that does not include the search run id. Rows include return, volatility, downside, drawdown, trend, and tail-risk summaries that can be reused when later search lists include the same listing. Rows also include `quarantined_price_count`, `non_positive_price_detected`, `duplicate_date_detected`, `stale_price_detected`, `unexplained_gap_detected`, `meets_min_history_252/504/756`, `production_eligible`, and `data_quality_reason` from the shared `founder.return_quality` gate.
+- `univariate_statistics`: one Gold row per ISIN listing, written to a stable listing path that does not include the search run id. Rows include return, volatility, downside, drawdown, trend, tail-risk, income-distribution, history-coverage, and data-quality summaries that can be reused when later search lists include the same listing. Portfolio-facing field groups are defined in `founder.univariate_categories` as Instrument Identity, History Coverage, Return Level, Return Distribution, Volatility And Downside Risk, Risk-Adjusted Performance, Tail Risk, Drawdown And Trend, Income Distribution, and Data Quality And Production Readiness. Rows also include `quarantined_price_count`, `non_positive_price_detected`, `duplicate_date_detected`, `stale_price_detected`, `unexplained_gap_detected`, `meets_min_history_252/504/756`, `production_eligible`, and `data_quality_reason` from the shared `founder.return_quality` gate.
 - `bivariate_statistics`: one Gold row per pair of distinct ISIN listings, written to deterministic `version`/`bucket` Parquet files (`bucket = left_id % bucket_count`) instead of one file per pair, so file count grows sublinearly with pair count. Rows include stable listing keys, stable pair key, the `version` and `bucket` they were written under, common-date range, common observation count, Pearson correlation, Spearman correlation, covariance, each side's variance, and directional beta values. A universe whose theoretical pair count exceeds an explicit `max_pair_count` guard (default 500,000) is rejected before any pair is enumerated or submitted to a worker. Default worker count uses all CPU cores visible to the system; `--concurrency` or the API `concurrency` argument caps worker processes for bounded runs. Pair-plan diagnostics (listing count, theoretical pair count, mode, chunk size, worker count, bucket count, and rejection reason if any) are persisted as a `bivariate-statistics-plan` job manifest for every call. A bucket file is only rewritten when at least one of its pairs changed or was added/removed; unaffected buckets are left untouched, and a bucket whose stored `bucket` field does not match its own file position is treated as corrupt and never used as a cache hit. `founder.bivariate_statistics.read_legacy_bivariate_pair` remains available to read historical pre-C03 one-file-per-pair artifacts (`gold/bivariate_statistics/{left_exchange}/{left_ISIN}/{left_code}/{right_exchange}__{right_ISIN}__{right_code}.parquet`) during the migration window; new writes never use that layout.
 - `selection_statistics_view` (PR74, `silver/{source_module}/selection_id={selection_id}/statistics_view.json`): a read-only materialization of which of the above cached univariate/bivariate rows belong to a Metadata Filter or Univariate Filter selection. `founder.statistics_views.build_selection_statistics_view` checks the generic Gold caches for every selected listing and unordered pair and reports `missing_univariate_listings`/`missing_bivariate_pairs` deterministically rather than recomputing or substituting a partial result; `read_selection_statistics` loads a selection's cached rows without recomputing and raises when the cache is incomplete.
 - `correlation_edges`: Gold pair-search table for scalable correlation filtering. Rows store one upper-triangle pair where `left_id < right_id`, the listing identifiers, metric name, input version, common date range, common observation count, and correlation value. Same-ISIN pairs are skipped even when the listings use different exchanges or codes. Supported metrics are `pearson` and `spearman`; Pearson values are computed with an incremental online correlation algorithm, and Spearman values use an approximative online rank-score correlation. Edge values use only the common date intersection of the two return series. Bucket files are grouped by `left_id % bucket_count` so later DuckDB or Polars scans can filter relevant partitions instead of opening a dense matrix. Building edges without a `min_abs_correlation`/`top_k_per_left` filter (dense mode) is subject to the same `max_pair_count` scale guard as `bivariate_statistics`.
@@ -85,6 +85,70 @@ Bronze and Silver default to concurrency `2` for provider/API and IO safety. Uni
 Gold input builds are designed for large ETF universes. The CLI defaults to all visible CPU cores for parallel Gold workers, processes one ISIN listing per worker task, and computes each symmetric correlation/covariance pair only once before writing per-left-listing files. If any listing date or the listing count changes, the global input snapshot changes and Gold recomputes the affected matrix outputs instead of trusting stale pair statistics.
 
 Gap-aware planning discovers missing windows from the `quotes` data type because quote rows are the dense dated market series. Bronze applies those planned windows to quotes, dividends, and splits through dataset strategies, and stores dividends and splits as dated Bronze rows beside quotes.
+
+### Univariate Statistics Field Reference
+
+The `univariate_statistics` row contains these fields. `README.md` keeps the longer user-facing semantics, ranges, units, and empirical bands; this contract table is the compact schema reference.
+
+| Field | Short description |
+| --- | --- |
+| `isin` | Instrument ISIN identifier. |
+| `exchange` | Listing exchange code. |
+| `code` | Provider listing code or ticker. |
+| `confidence_level` | Tail-risk confidence level used for VaR and Expected Shortfall. |
+| `first_quote_date` | First quote date included in the listing window. |
+| `last_quote_date` | Last quote date included in the listing window. |
+| `quote_observation_count` | Count of quote rows for the listing. |
+| `first_return_date` | First daily return date after the first valid quote. |
+| `last_return_date` | Last daily return date. |
+| `return_observation_count` | Count of daily return observations. |
+| `start_adjusted_close` | First adjusted close in the quote window. |
+| `end_adjusted_close` | Last adjusted close in the quote window. |
+| `total_return` | Full-window simple return from first to last adjusted close. |
+| `cagr` | Compound annual growth rate over the quote window. |
+| `cumulative_log_return` | Sum of daily adjusted-close log returns. |
+| `mean_log_return` | Arithmetic mean of daily log returns. |
+| `median_log_return` | Median daily log return. |
+| `min_log_return` | Worst daily log return. |
+| `max_log_return` | Best daily log return. |
+| `mean_simple_return` | Arithmetic mean of daily simple returns. |
+| `median_simple_return` | Median daily simple return. |
+| `min_simple_return` | Worst daily simple return. |
+| `max_simple_return` | Best daily simple return. |
+| `daily_log_return_std` | Sample standard deviation of daily log returns. |
+| `daily_simple_return_std` | Sample standard deviation of daily simple returns. |
+| `annualized_return` | Alias of annualized log return. |
+| `annualized_log_return` | Mean daily log return multiplied by 252 trading days. |
+| `annualized_simple_return` | Mean daily simple return multiplied by 252 trading days. |
+| `annualized_geometric_return` | Geometric annual return derived from annualized log return. |
+| `annualized_volatility` | Annualized daily log-return volatility. |
+| `realized_variance` | Sum of squared daily log returns over the window. |
+| `realized_volatility` | Square root of realized variance. |
+| `downside_deviation` | Annualized downside deviation from negative daily log returns. |
+| `sharpe_ratio` | Annualized log return divided by annualized volatility. |
+| `sortino_ratio` | Annualized log return divided by downside deviation. |
+| `var` | Historical daily-loss quantile at `confidence_level`. |
+| `expected_shortfall` | Mean daily loss in the tail at or beyond VaR. |
+| `tail_observation_count` | Number of tail observations used for Expected Shortfall. |
+| `max_drawdown` | Worst peak-to-trough adjusted-close drawdown. |
+| `positive_day_ratio` | Share of daily log returns greater than zero. |
+| `log_price_slope` | Linear-regression slope of log adjusted close over quote order. |
+| `trend_r_squared` | R-squared of the log-price trend regression. |
+| `availability_reason` | Basic statistic availability status such as `ok` or insufficient returns. |
+| `distribution_frequency` | Inferred distribution cadence from positive dividend events. |
+| `distribution_events_per_year` | Annualized positive distribution event rate. |
+| `last_distribution_date` | Latest positive distribution event date. |
+| `distribution_observation_count` | Count of positive distribution events used for inference. |
+| `quarantined_price_count` | Count of invalid price rows excluded by return-quality checks. |
+| `non_positive_price_detected` | Whether a zero or negative price was detected. |
+| `duplicate_date_detected` | Whether duplicate quote dates were detected. |
+| `stale_price_detected` | Whether the stale-price quality gate fired. |
+| `unexplained_gap_detected` | Whether unexplained quote-date gaps were detected. |
+| `meets_min_history_252` | Whether the listing has at least 252 valid observations. |
+| `meets_min_history_504` | Whether the listing has at least 504 valid observations. |
+| `meets_min_history_756` | Whether the listing has at least 756 valid observations. |
+| `production_eligible` | Whether the listing passes the current production-quality gate. |
+| `data_quality_reason` | Main quality reason for eligibility or exclusion. |
 
 ## Portfolio Evaluation Outputs
 

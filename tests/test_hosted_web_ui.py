@@ -28,10 +28,14 @@ def test_web_shell_exposes_user_research_funnel_surfaces() -> None:
     ):
         assert expected in source
 
-    assert "Project Snapshot" in source
+    assert "Project Snapshot" not in source
+    assert "<strong>Projects</strong>" in source
+    assert "<h1 data-workspace-title>Projects</h1>" in source
     assert "No project selected" in source
     assert "Consisting currently of 0 ISINs" in source
+    assert "API ${escapedApiUrl}" not in source
     assert "currentSelectionSummary(project)" in source
+    assert "updateCurrentSelectionSummary(project)" in source
     assert "selectedIsinCount(project)" in source
     assert "data-project-selector" in source
     assert "data-project-workspace hidden" in source
@@ -101,6 +105,7 @@ def test_web_shell_defines_versioned_design_system_and_route_skeletons() -> None
     assert 'event.key === "ArrowRight"' in source
     assert "pointerdown" in source
     assert "pointermove" in source
+    assert "margin-bottom: 32px;" in source
 
     for removed in (
         "Downloads",
@@ -134,12 +139,27 @@ def test_web_shell_models_statistics_path_order_and_compute_pages() -> None:
     source = _web_source()
 
     positions = [
-        source.index(f'id: "{step}"') for step in ("univariate", "bivariate", "multivariate")
+        source.index(f'id: "{step}"')
+        for step in ("load-data", "univariate", "bivariate", "multivariate")
     ]
     assert positions == sorted(positions)
 
     for expected in (
         "statisticsSteps",
+        "Load Data",
+        "Load selected ISINs",
+        "apiRoutes.loadSelectedIsins",
+        "isLoadData ? apiRoutes.loadSelectedIsins : apiRoutes.statisticsCompute(kind)",
+        'isLoadData ? "load-data" : kind + "-statistics"',
+        "Loaded selected ISINs.",
+        "display: flex;",
+        "flex-wrap: nowrap;",
+        "overflow-x: auto;",
+        "if (nextStep && statisticsStepEnabled(nextStep.id)) showStatisticsPage(nextStep.id);",
+        'if (!result.status || result.status === "succeeded")',
+        '"load-data": Boolean(project && project.data_loaded === true)',
+        'if (project && kind === "load-data") project.data_loaded = true;',
+        'projectState.statisticsComplete["load-data"] ? "univariate" : "load-data"',
         "statisticsStepButton(step, index)",
         "statisticsPanel(step, index)",
         "statistics-path",
@@ -147,19 +167,37 @@ def test_web_shell_models_statistics_path_order_and_compute_pages() -> None:
         "progress-banner",
         "data-statistics-progress",
         "data-compute-statistics",
+        "Univariate Statistics Filters",
+        "data-univariate-summary-body",
+        "data-univariate-summary-status",
+        "renderUnivariateStatisticsSummary(items)",
+        "loadUnivariateStatisticsSummary()",
+        "resetUnivariateStatisticsSummary()",
+        "formatSummaryValue(value)",
+        "filterOptionMarkup(option)",
+        "apiRoutes.univariateStatisticsSummary",
+        "Compute univariate statistics to populate this table.",
         " disabled",
         "locked",
         "complete",
         "computeStatistics(kind)",
         "showStatisticsPage(kind)",
         "statisticsStepEnabled(kind)",
+        "nextStatisticsStep(kind)",
+        "completeStatisticsStep(kind, result = {})",
         "updateStatisticsPathAccess()",
         "resetStatisticsWorkflow()",
         "setStatisticsProgress(kind, progress, message)",
+        "project.selected_count = Number(result.selected_count);",
+        "updateCurrentSelectionSummary(project)",
+        'if (kind === "univariate") {',
+        "void loadUnivariateStatisticsSummary();",
         "apiRoutes.statisticsCompute(kind)",
         'method: "POST"',
     ):
         assert expected in source
+
+    assert 'if (kind === "univariate") void loadUnivariateStatisticsSummary();' not in source
 
 
 def test_web_shell_keeps_secret_inputs_write_only_and_uses_google_entrypoint() -> None:
