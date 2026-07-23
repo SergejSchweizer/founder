@@ -28,10 +28,14 @@ def test_web_shell_exposes_user_research_funnel_surfaces() -> None:
     ):
         assert expected in source
 
-    assert "Project Snapshot" in source
+    assert "Project Snapshot" not in source
+    assert "<strong>Projects</strong>" in source
+    assert "<h1 data-workspace-title>Projects</h1>" in source
     assert "No project selected" in source
     assert "Consisting currently of 0 ISINs" in source
+    assert "API ${escapedApiUrl}" not in source
     assert "currentSelectionSummary(project)" in source
+    assert "updateCurrentSelectionSummary(project)" in source
     assert "selectedIsinCount(project)" in source
     assert "data-project-selector" in source
     assert "data-project-workspace hidden" in source
@@ -59,7 +63,7 @@ def test_dashboard_shell_is_gated_until_authenticated_session() -> None:
     assert "mountAuthenticatedShell(session)" in source
     assert "bindAuthenticatedHandlers()" in source
     assert "[hidden] { display: none !important; }" in source
-    assert 'meta[name="founder-csrf-token"]' in source
+    assert 'meta[name="camovar-csrf-token"]' in source
     assert "session.csrf_token" in source
     assert "Google login is required before the dashboard is shown." in source
     assert source.index("data-auth-gate") < source.index("data-authenticated-template")
@@ -68,7 +72,7 @@ def test_dashboard_shell_is_gated_until_authenticated_session() -> None:
 def test_web_shell_defines_versioned_design_system_and_route_skeletons() -> None:
     source = _web_source()
 
-    assert 'data-design-system-version="founder-web-shell-v1"' in source
+    assert 'data-design-system-version="camovar-web-shell-v1"' in source
     for token in (
         "typography",
         "spacing",
@@ -101,6 +105,7 @@ def test_web_shell_defines_versioned_design_system_and_route_skeletons() -> None
     assert 'event.key === "ArrowRight"' in source
     assert "pointerdown" in source
     assert "pointermove" in source
+    assert "margin-bottom: 32px;" in source
 
     for removed in (
         "Downloads",
@@ -134,12 +139,27 @@ def test_web_shell_models_statistics_path_order_and_compute_pages() -> None:
     source = _web_source()
 
     positions = [
-        source.index(f'id: "{step}"') for step in ("univariate", "bivariate", "multivariate")
+        source.index(f'id: "{step}"')
+        for step in ("load-data", "univariate", "bivariate", "multivariate")
     ]
     assert positions == sorted(positions)
 
     for expected in (
         "statisticsSteps",
+        "Load Data",
+        "Load selected ISINs",
+        "apiRoutes.loadSelectedIsins",
+        "isLoadData ? apiRoutes.loadSelectedIsins : apiRoutes.statisticsCompute(kind)",
+        'isLoadData ? "load-data" : kind + "-statistics"',
+        "Loaded selected ISINs.",
+        "display: flex;",
+        "flex-wrap: nowrap;",
+        "overflow-x: auto;",
+        "if (nextStep && statisticsStepEnabled(nextStep.id)) showStatisticsPage(nextStep.id);",
+        'if (!result.status || result.status === "succeeded")',
+        '"load-data": Boolean(project && project.data_loaded === true)',
+        'if (project && kind === "load-data") project.data_loaded = true;',
+        'projectState.statisticsComplete["load-data"] ? "univariate" : "load-data"',
         "statisticsStepButton(step, index)",
         "statisticsPanel(step, index)",
         "statistics-path",
@@ -147,19 +167,37 @@ def test_web_shell_models_statistics_path_order_and_compute_pages() -> None:
         "progress-banner",
         "data-statistics-progress",
         "data-compute-statistics",
+        "Univariate Statistics Filters",
+        "data-univariate-summary-body",
+        "data-univariate-summary-status",
+        "renderUnivariateStatisticsSummary(items)",
+        "loadUnivariateStatisticsSummary()",
+        "resetUnivariateStatisticsSummary()",
+        "formatSummaryValue(value)",
+        "filterOptionMarkup(option)",
+        "apiRoutes.univariateStatisticsSummary",
+        "Compute univariate statistics to populate this table.",
         " disabled",
         "locked",
         "complete",
         "computeStatistics(kind)",
         "showStatisticsPage(kind)",
         "statisticsStepEnabled(kind)",
+        "nextStatisticsStep(kind)",
+        "completeStatisticsStep(kind, result = {})",
         "updateStatisticsPathAccess()",
         "resetStatisticsWorkflow()",
         "setStatisticsProgress(kind, progress, message)",
+        "project.selected_count = Number(result.selected_count);",
+        "updateCurrentSelectionSummary(project)",
+        'if (kind === "univariate") {',
+        "void loadUnivariateStatisticsSummary();",
         "apiRoutes.statisticsCompute(kind)",
         'method: "POST"',
     ):
         assert expected in source
+
+    assert 'if (kind === "univariate") void loadUnivariateStatisticsSummary();' not in source
 
 
 def test_web_shell_keeps_secret_inputs_write_only_and_uses_google_entrypoint() -> None:
@@ -193,7 +231,7 @@ def test_web_shell_consumes_api_contracts_with_csrf_and_idempotency_helpers() ->
     assert 'const apiBaseUrl = "/api";' in source
     assert "fetch(apiBaseUrl + path" in source
     assert 'credentials: "include"' in source
-    assert '"X-Founder-CSRF"' in source
+    assert '"X-Camovar-CSRF"' in source
     assert "idempotencyKey(prefix)" in source
     assert "randomUUID" in source
     for route in (
@@ -280,13 +318,13 @@ def test_web_server_proxies_api_requests_same_origin_to_internal_api() -> None:
     assert "apiBaseUrl)" in source
     assert "data-current-selection-summary" in source
     assert ">API ${escapedApiUrl}</p>" not in source
-    assert 'process.env.FOUNDER_API_BASE_URL || "http://api:8000"' in source
+    assert 'process.env.CAMOVAR_API_BASE_URL || "http://api:8000"' in source
 
 
 def test_web_server_handles_local_google_session_same_origin_before_auth_proxy() -> None:
     source = _web_source()
 
-    assert 'process.env.FOUNDER_AUTH_MODE || "google"' in source
+    assert 'process.env.CAMOVAR_AUTH_MODE || "google"' in source
     assert 'authMode === "local-dev"' in source
     assert 'authMode === "auto"' not in source
     assert 'requestUrl.pathname === "/auth/google/start"' in source
@@ -299,9 +337,9 @@ def test_web_server_handles_local_google_session_same_origin_before_auth_proxy()
     assert "function sessionFromRequest(request)" in source
     assert "const session = sessionFromRequest(request)" in source
     assert "renderAppShell(apiBaseUrl, session)" in source
-    assert "founder_session_user" in source
-    assert "founder_csrf" in source
-    assert "FOUNDER_LOCAL_DEV_GOOGLE_EMAIL" in source
+    assert "camovar_session_user" in source
+    assert "camovar_csrf" in source
+    assert "CAMOVAR_LOCAL_DEV_GOOGLE_EMAIL" in source
     assert "local-google-dev-user@example.test" in source
     assert 'cookieHeader(providerCookieName, "local-dev-google"' in source
     assert source.index('requestUrl.pathname === "/auth/google/start"') < source.index(
@@ -313,15 +351,15 @@ def test_web_server_implements_real_google_oidc_runtime_flow() -> None:
     source = _web_source()
 
     for expected in (
-        "FOUNDER_AUTH_MODE",
-        "FOUNDER_GOOGLE_CLIENT_ID",
-        "FOUNDER_GOOGLE_REDIRECT_URI",
-        "FOUNDER_GOOGLE_CLIENT_SECRET_FILE",
-        "FOUNDER_GOOGLE_ALLOWED_DOMAIN",
+        "CAMOVAR_AUTH_MODE",
+        "CAMOVAR_GOOGLE_CLIENT_ID",
+        "CAMOVAR_GOOGLE_REDIRECT_URI",
+        "CAMOVAR_GOOGLE_CLIENT_SECRET_FILE",
+        "CAMOVAR_GOOGLE_ALLOWED_DOMAIN",
         "createGoogleAuthRequest()",
         "applyGooglePrivateIpDeviceParams(url)",
         'url.searchParams.set("device_id"',
-        'url.searchParams.set("device_name", "Founder Research Local")',
+        'url.searchParams.set("device_name", "Camovar Research Local")',
         'url.searchParams.set("prompt", "select_account")',
         'url.searchParams.set("code_challenge_method", "S256")',
         'requestUrl.pathname === "/auth/google/callback"',

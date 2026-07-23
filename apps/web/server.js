@@ -8,31 +8,32 @@ if (process.argv.includes("--health")) {
 }
 
 const port = Number.parseInt(process.env.PORT || "3000", 10);
-const apiBaseUrl = process.env.FOUNDER_API_BASE_URL || "http://api:8000";
-const authMode = process.env.FOUNDER_AUTH_MODE || "google";
-const googleClientId = process.env.FOUNDER_GOOGLE_CLIENT_ID || "";
+const apiBaseUrl = process.env.CAMOVAR_API_BASE_URL || "http://api:8000";
+const authMode = process.env.CAMOVAR_AUTH_MODE || "google";
+const googleClientId = process.env.CAMOVAR_GOOGLE_CLIENT_ID || "";
 const googleRedirectUri =
-  process.env.FOUNDER_GOOGLE_REDIRECT_URI || `http://localhost:${port}/auth/google/callback`;
-const googleAllowedDomain = process.env.FOUNDER_GOOGLE_ALLOWED_DOMAIN || "";
+  process.env.CAMOVAR_GOOGLE_REDIRECT_URI || `http://localhost:${port}/auth/google/callback`;
+const googleAllowedDomain = process.env.CAMOVAR_GOOGLE_ALLOWED_DOMAIN || "";
 const googleAuthEndpoint =
-  process.env.FOUNDER_GOOGLE_AUTH_ENDPOINT || "https://accounts.google.com/o/oauth2/v2/auth";
+  process.env.CAMOVAR_GOOGLE_AUTH_ENDPOINT || "https://accounts.google.com/o/oauth2/v2/auth";
 const googleTokenEndpoint =
-  process.env.FOUNDER_GOOGLE_TOKEN_ENDPOINT || "https://oauth2.googleapis.com/token";
-const googleJwksUri = process.env.FOUNDER_GOOGLE_JWKS_URI || "https://www.googleapis.com/oauth2/v3/certs";
-const googleStateTtlMs = Number.parseInt(process.env.FOUNDER_GOOGLE_STATE_TTL_SECONDS || "600", 10) * 1000;
+  process.env.CAMOVAR_GOOGLE_TOKEN_ENDPOINT || "https://oauth2.googleapis.com/token";
+const googleJwksUri = process.env.CAMOVAR_GOOGLE_JWKS_URI || "https://www.googleapis.com/oauth2/v3/certs";
+const googleStateTtlMs = Number.parseInt(process.env.CAMOVAR_GOOGLE_STATE_TTL_SECONDS || "600", 10) * 1000;
 const localDevUserId = "local-google-dev-user";
 const localDevCsrfToken = "valid-csrf";
 const localDevGoogleEmail = (
-  process.env.FOUNDER_LOCAL_DEV_GOOGLE_EMAIL || "local-google-dev-user@example.test"
+  process.env.CAMOVAR_LOCAL_DEV_GOOGLE_EMAIL || "local-google-dev-user@example.test"
 ).toLowerCase();
-const sessionCookieName = "founder_session_user";
-const csrfCookieName = "founder_csrf";
-const emailCookieName = "founder_auth_email";
-const providerCookieName = "founder_auth_provider";
+const sessionCookieName = "camovar_session_user";
+const csrfCookieName = "camovar_csrf";
+const emailCookieName = "camovar_auth_email";
+const providerCookieName = "camovar_auth_provider";
 const pendingGoogleStates = new Map();
 let googleJwksCache = { expiresAt: 0, keys: [] };
 
 const statisticsSteps = [
+  { id: "load-data", label: "Load Data", actionLabel: "Load selected ISINs", endpoint: "load-data" },
   { id: "univariate", label: "Univariate Statistics" },
   { id: "bivariate", label: "Bivariate Statistics" },
   { id: "multivariate", label: "Multivariate Statistics" },
@@ -137,13 +138,13 @@ function googleRedirectUsesPrivateIp() {
 
 function applyGooglePrivateIpDeviceParams(url) {
   if (!googleRedirectUsesPrivateIp()) return;
-  url.searchParams.set("device_id", "founder-" + sha256Hex(googleRedirectUri).slice(0, 32));
-  url.searchParams.set("device_name", "Founder Research Local");
+  url.searchParams.set("device_id", "camovar-" + sha256Hex(googleRedirectUri).slice(0, 32));
+  url.searchParams.set("device_name", "Camovar Research Local");
 }
 
 function readGoogleClientSecret() {
-  if (process.env.FOUNDER_GOOGLE_CLIENT_SECRET) return process.env.FOUNDER_GOOGLE_CLIENT_SECRET;
-  const secretPath = process.env.FOUNDER_GOOGLE_CLIENT_SECRET_FILE;
+  if (process.env.CAMOVAR_GOOGLE_CLIENT_SECRET) return process.env.CAMOVAR_GOOGLE_CLIENT_SECRET;
+  const secretPath = process.env.CAMOVAR_GOOGLE_CLIENT_SECRET_FILE;
   if (!secretPath) return "";
   return fs.readFileSync(secretPath, "utf8").trim();
 }
@@ -264,7 +265,7 @@ function brandMarkup(session = null) {
   const userLine = label
     ? `<span class="brand-user" data-auth-user>${escapeHtml(label)}${provider ? ` · ${escapeHtml(provider)}` : ""}</span>`
     : "";
-  return `<div class="brand"><span class="brand-mark" aria-hidden="true">F</span><span class="brand-copy"><span>Founder Research</span>${userLine}</span></div>`;
+  return `<div class="brand"><span class="brand-mark" aria-hidden="true">F</span><span class="brand-copy"><span>Camovar Research</span>${userLine}</span></div>`;
 }
 
 function statisticsStepButton(step, index) {
@@ -283,14 +284,40 @@ function statisticsPanel(step, index) {
   return `<section class="statistics-page" data-statistics-page="${step.id}"${index === 0 ? "" : " hidden"}>
     <div class="progress-banner" data-statistics-progress-banner="${step.id}">
       <div>
-        <p class="eyebrow">statistics compute</p>
+        <p class="eyebrow">${step.id === "load-data" ? "data load" : "statistics compute"}</p>
         <h2>${escapeHtml(step.label)}</h2>
-        <p class="subtle" data-statistics-status="${step.id}">Idle. Select Compute to run this statistic for the current project.</p>
+        <p class="subtle" data-statistics-status="${step.id}">Idle. Select ${escapeHtml(step.actionLabel || "Compute")} to run this step for the current project.</p>
       </div>
-      <button class="primary" type="button" data-compute-statistics="${step.id}">Compute</button>
+      <button class="primary" type="button" data-compute-statistics="${step.id}">${escapeHtml(step.actionLabel || "Compute")}</button>
       <progress value="0" max="100" data-statistics-progress="${step.id}"></progress>
     </div>
+    ${step.id === "univariate" ? univariateStatisticsTableMarkup() : ""}
   </section>`;
+}
+
+function univariateStatisticsTableMarkup() {
+  return `<div class="statistics-table-panel">
+    <div>
+      <h3>Univariate Statistics Filters</h3>
+      <p class="subtle" data-univariate-summary-status>Compute univariate statistics to populate this table.</p>
+    </div>
+    <div class="statistics-table-wrap">
+      <table class="statistics-table">
+        <thead>
+          <tr>
+            <th>Statistic</th>
+            <th>Mean</th>
+            <th>Median</th>
+            <th>+- 3 std</th>
+            <th>Filter</th>
+          </tr>
+        </thead>
+        <tbody data-univariate-summary-body>
+          <tr><td colspan="5">Compute univariate statistics to populate this table.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>`;
 }
 
 function renderStyles() {
@@ -486,6 +513,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   align-items: center;
   border-bottom: 1px solid var(--line);
   padding-bottom: 16px;
+  margin-bottom: 32px;
 }
 .eodhd-fetch {
   width: min(620px, 100%);
@@ -516,12 +544,15 @@ h2 { font-size: var(--section-title); font-weight: 700; letter-spacing: 0; }
   gap: 8px;
 }
 .statistics-path {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  display: flex;
+  flex-wrap: nowrap;
   gap: 8px;
   margin: 18px 0;
+  overflow-x: auto;
+  padding-bottom: 2px;
 }
 .statistics-path__step {
+  flex: 1 0 178px;
   min-height: 66px;
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
@@ -587,6 +618,36 @@ h2 { font-size: var(--section-title); font-weight: 700; letter-spacing: 0; }
   width: 100%;
   height: 12px;
   accent-color: var(--accent);
+}
+.statistics-table-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  padding: var(--space-panel);
+}
+.statistics-table-wrap {
+  overflow-x: auto;
+}
+.statistics-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+}
+.statistics-table th, .statistics-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: middle;
+}
+.statistics-table th {
+  color: var(--muted);
+  font-size: var(--meta);
+  font-weight: 700;
+}
+.statistics-table select {
+  min-width: 180px;
 }
 .project-empty-state {
   min-height: 360px;
@@ -664,7 +725,6 @@ input, select {
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
-  .statistics-path { grid-template-columns: 1fr; }
 }
 @media (max-width: 620px) {
   .workspace { padding: 16px; }
@@ -682,12 +742,12 @@ input, select {
 }
 
 function renderAuthenticatedShell(escapedApiUrl, session = null) {
-  return `<div class="app-shell" data-design-system-version="founder-web-shell-v1">
-  <aside class="sidebar" aria-label="Founder navigation">
+  return `<div class="app-shell" data-design-system-version="camovar-web-shell-v1">
+  <aside class="sidebar" aria-label="Camovar navigation">
     ${brandMarkup(session)}
     <div class="snapshot-indicator" data-snapshot-indicator aria-disabled="true">
       <label>
-        <strong>Project Snapshot</strong>
+        <strong>Projects</strong>
         <select name="project_snapshot" data-project-selector disabled>
           <option value="">No project selected</option>
         </select>
@@ -702,7 +762,7 @@ function renderAuthenticatedShell(escapedApiUrl, session = null) {
   <main class="workspace">
     <header class="topbar">
       <div>
-        <h1 data-workspace-title>Project Snapshot</h1>
+        <h1 data-workspace-title>Projects</h1>
         <p class="subtle" data-api-base="${escapedApiUrl}" data-current-selection-summary>Consisting currently of 0 ISINs</p>
       </div>
       <form class="eodhd-fetch" data-form="eodhd-fetch">
@@ -714,7 +774,7 @@ function renderAuthenticatedShell(escapedApiUrl, session = null) {
 
     <section class="project-empty-state" data-project-empty-state>
       <h2>No project selected</h2>
-      <p>Select a project from Project Snapshot or define a new ISIN search project.</p>
+      <p>Select a project from Projects or define a new ISIN search project.</p>
       <form class="project-definition" data-form="project-definition" aria-disabled="true">
         <div class="project-definition__header">
           <h2>Project Definition</h2>
@@ -759,13 +819,13 @@ function renderAppShell(apiUrl, initialSession = null) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="founder-csrf-token" content="${escapedCsrfToken}">
-<title>Founder Research</title>
+<meta name="camovar-csrf-token" content="${escapedCsrfToken}">
+<title>Camovar Research</title>
 ${renderStyles()}
 </head>
 <body>
 <div class="login-gate" data-auth-gate${gateHidden}>
-  <section class="login-panel" aria-label="Founder login">
+  <section class="login-panel" aria-label="Camovar login">
     ${brandMarkup()}
     <h1>Sign in to continue</h1>
     <p class="login-panel__copy">The research dashboard is only available after Google authentication.</p>
@@ -791,10 +851,12 @@ const apiRoutes = {
   metadataFilterFetchAllIsins: "/metadata-filter/fetch-all-isins",
   metadataFilterOptions: "/metadata-filter/options",
   metadataFilterProjects: "/metadata-filter/projects",
+  loadSelectedIsins: "/data/load-selected-isins",
+  univariateStatisticsSummary: "/statistics/univariate/summary",
   statisticsCompute: (kind) => "/statistics/" + encodeURIComponent(kind) + "/compute"
 };
 function csrfToken() {
-  return document.querySelector('meta[name="founder-csrf-token"]').content;
+  return document.querySelector('meta[name="camovar-csrf-token"]').content;
 }
 function idempotencyKey(prefix) {
   if (globalThis.crypto && globalThis.crypto.randomUUID) {
@@ -805,7 +867,7 @@ function idempotencyKey(prefix) {
 async function apiRequest(path, options = {}) {
   const headers = Object.assign({ "accept": "application/json" }, options.headers || {});
   if (options.body) headers["content-type"] = "application/json";
-  if (options.method && options.method !== "GET") headers["X-Founder-CSRF"] = csrfToken();
+  if (options.method && options.method !== "GET") headers["X-Camovar-CSRF"] = csrfToken();
   const response = await fetch(apiBaseUrl + path, {
     method: options.method || "GET",
     credentials: "include",
@@ -835,7 +897,8 @@ let projectState = {
   selectedProjectId: "",
   metadataReady: false,
   eodhdCredentialSaved: false,
-  statisticsComplete: { univariate: false, bivariate: false, multivariate: false }
+  univariateSummaryLoaded: false,
+  statisticsComplete: { "load-data": false, univariate: false, bivariate: false, multivariate: false }
 };
 function normalizeProjectItems(payload) {
   if (!payload || !Array.isArray(payload.items)) return [];
@@ -856,6 +919,10 @@ function selectedIsinCount(project) {
 function currentSelectionSummary(project) {
   const count = selectedIsinCount(project);
   return "Consisting currently of " + count + " ISIN" + (count === 1 ? "" : "s");
+}
+function updateCurrentSelectionSummary(project = selectedProject()) {
+  const selectionSummary = document.querySelector("[data-current-selection-summary]");
+  if (selectionSummary) selectionSummary.textContent = currentSelectionSummary(project);
 }
 function setEodhdFetchStatus(message) {
   const target = document.querySelector("[data-eodhd-fetch-status]");
@@ -960,6 +1027,62 @@ async function fetchAllIsinsForProjects(form) {
 function optionMarkup(value) {
   return '<option value="' + clientEscapeHtml(value) + '">' + clientEscapeHtml(value) + "</option>";
 }
+function formatSummaryValue(value) {
+  if (value === null || value === undefined || value === "") return "n/a";
+  if (typeof value === "number") return Number.isFinite(value) ? value.toPrecision(6) : "n/a";
+  return String(value);
+}
+function filterOptionMarkup(option) {
+  if (!option || option.value === undefined) return "";
+  const label = option.label === undefined ? option.value : option.label;
+  return '<option value="' + clientEscapeHtml(option.value) + '">' + clientEscapeHtml(label) + "</option>";
+}
+function renderUnivariateStatisticsSummary(items) {
+  const body = document.querySelector("[data-univariate-summary-body]");
+  const status = document.querySelector("[data-univariate-summary-status]");
+  if (!body) return;
+  const rows = Array.isArray(items) ? items : [];
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="5">No univariate statistics are available yet.</td></tr>';
+    if (status) status.textContent = "No univariate statistics are available yet.";
+    return;
+  }
+  body.innerHTML = rows.map((row) => {
+    const filterOptions = Array.isArray(row.filter_options) ? row.filter_options : [];
+    const options = '<option value="">Choose filter</option>' + filterOptions.map(filterOptionMarkup).join("");
+    return '<tr>'
+      + '<td><strong>' + clientEscapeHtml(row.name || "") + '</strong><br><span class="subtle">'
+      + clientEscapeHtml(row.category || "") + "</span></td>"
+      + "<td>" + clientEscapeHtml(formatSummaryValue(row.mean)) + "</td>"
+      + "<td>" + clientEscapeHtml(formatSummaryValue(row.median)) + "</td>"
+      + "<td>" + clientEscapeHtml(formatSummaryValue(row.three_std_range)) + "</td>"
+      + '<td><select name="filter_' + clientEscapeHtml(row.name || "statistic") + '">' + options + "</select></td>"
+      + "</tr>";
+  }).join("");
+  if (status) status.textContent = "Statistics summary loaded.";
+}
+async function loadUnivariateStatisticsSummary() {
+  if (projectState.univariateSummaryLoaded) return;
+  const status = document.querySelector("[data-univariate-summary-status]");
+  if (status) status.textContent = "Loading statistics summary...";
+  try {
+    const payload = await apiRequest(apiRoutes.univariateStatisticsSummary);
+    renderUnivariateStatisticsSummary(payload.items);
+    projectState.univariateSummaryLoaded = true;
+  } catch (_error) {
+    renderUnivariateStatisticsSummary([]);
+    if (status) status.textContent = "Statistics summary is not available.";
+  }
+}
+function resetUnivariateStatisticsSummary() {
+  projectState.univariateSummaryLoaded = false;
+  const body = document.querySelector("[data-univariate-summary-body]");
+  const status = document.querySelector("[data-univariate-summary-status]");
+  if (body) {
+    body.innerHTML = '<tr><td colspan="5">Compute univariate statistics to populate this table.</td></tr>';
+  }
+  if (status) status.textContent = "Compute univariate statistics to populate this table.";
+}
 function setProjectDefinitionStatus(message) {
   const target = document.querySelector("[data-project-definition-status]");
   if (target) target.textContent = message;
@@ -1007,6 +1130,11 @@ function statisticsStepEnabled(kind) {
   const previous = statisticsSteps[index - 1];
   return Boolean(previous && projectState.statisticsComplete[previous.id]);
 }
+function nextStatisticsStep(kind) {
+  const index = statisticsStepIndex(kind);
+  if (index < 0) return null;
+  return statisticsSteps[index + 1] || null;
+}
 function updateStatisticsPathAccess() {
   for (const button of document.querySelectorAll("[data-statistics-step]")) {
     const kind = button.dataset.statisticsStep || "";
@@ -1019,12 +1147,19 @@ function updateStatisticsPathAccess() {
   }
 }
 function resetStatisticsWorkflow() {
-  projectState.statisticsComplete = { univariate: false, bivariate: false, multivariate: false };
+  const project = selectedProject();
+  projectState.statisticsComplete = {
+    "load-data": Boolean(project && project.data_loaded === true),
+    univariate: false,
+    bivariate: false,
+    multivariate: false
+  };
+  resetUnivariateStatisticsSummary();
   for (const step of statisticsSteps) {
-    setStatisticsProgress(step.id, 0, "Idle. Select Compute to run this statistic for the current project.");
+    setStatisticsProgress(step.id, 0, "Idle. Select " + (step.actionLabel || "Compute") + " to run this step for the current project.");
   }
   updateStatisticsPathAccess();
-  showStatisticsPage("univariate");
+  showStatisticsPage(projectState.statisticsComplete["load-data"] ? "univariate" : "load-data");
 }
 function showStatisticsPage(kind) {
   if (!statisticsStepEnabled(kind)) return;
@@ -1045,21 +1180,37 @@ function setStatisticsProgress(kind, progress, message) {
   if (progressBar) progressBar.value = progress;
   if (status) status.textContent = message;
 }
+function completeStatisticsStep(kind, result = {}) {
+  const project = selectedProject();
+  if (project && Number.isFinite(result.selected_count)) {
+    project.selected_count = Number(result.selected_count);
+  }
+  if (project && kind === "load-data") project.data_loaded = true;
+  projectState.statisticsComplete[kind] = true;
+  updateCurrentSelectionSummary(project);
+  updateStatisticsPathAccess();
+  if (kind === "univariate") {
+    projectState.univariateSummaryLoaded = false;
+    void loadUnivariateStatisticsSummary();
+  }
+  const nextStep = nextStatisticsStep(kind);
+  if (nextStep && statisticsStepEnabled(nextStep.id)) showStatisticsPage(nextStep.id);
+}
 async function computeStatistics(kind) {
   const project = selectedProject();
   if (!project) {
     setStatisticsProgress(kind, 0, "Select a project before computing statistics.");
     return;
   }
-  setStatisticsProgress(kind, 12, "Starting " + kind + " statistics...");
-  const result = await apiRequest(apiRoutes.statisticsCompute(kind), {
+  const isLoadData = kind === "load-data";
+  setStatisticsProgress(kind, 12, isLoadData ? "Loading selected ISINs..." : "Starting " + kind + " statistics...");
+  const result = await apiRequest(isLoadData ? apiRoutes.loadSelectedIsins : apiRoutes.statisticsCompute(kind), {
     method: "POST",
-    headers: { "Idempotency-Key": idempotencyKey(kind + "-statistics") },
+    headers: { "Idempotency-Key": idempotencyKey(isLoadData ? "load-data" : kind + "-statistics") },
     body: { project_id: project.project_id }
   });
-  setStatisticsProgress(kind, Number(result.progress || 100), "Completed " + kind + " statistics.");
-  projectState.statisticsComplete[kind] = true;
-  updateStatisticsPathAccess();
+  setStatisticsProgress(kind, Number(result.progress || 100), isLoadData ? "Loaded selected ISINs." : "Completed " + kind + " statistics.");
+  if (!result.status || result.status === "succeeded") completeStatisticsStep(kind, result);
 }
 function selectProject(projectId) {
   const previousProjectId = projectState.selectedProjectId;
@@ -1069,12 +1220,11 @@ function selectProject(projectId) {
   const emptyState = document.querySelector("[data-project-empty-state]");
   const title = document.querySelector("[data-workspace-title]");
   const summary = document.querySelector("[data-project-summary]");
-  const selectionSummary = document.querySelector("[data-current-selection-summary]");
   if (workspace) workspace.hidden = !project;
   if (emptyState) emptyState.hidden = Boolean(project);
-  if (title) title.textContent = project ? projectLabel(project) : "Project Snapshot";
+  if (title) title.textContent = project ? projectLabel(project) : "Projects";
   if (summary) summary.textContent = project ? projectLabel(project) : "Not selected";
-  if (selectionSummary) selectionSummary.textContent = currentSelectionSummary(project);
+  updateCurrentSelectionSummary(project);
   renderProjectOptions();
   if (previousProjectId !== projectId) resetStatisticsWorkflow();
 }
@@ -1108,7 +1258,7 @@ function mountAuthenticatedShell(session) {
   const template = document.querySelector("[data-authenticated-template]");
   if (!root || !template) return;
   if (root.childElementCount === 0) root.appendChild(template.content.cloneNode(true));
-  const csrfMeta = document.querySelector('meta[name="founder-csrf-token"]');
+  const csrfMeta = document.querySelector('meta[name="camovar-csrf-token"]');
   if (csrfMeta && session && session.csrf_token) csrfMeta.content = session.csrf_token;
   const authUser = document.querySelector("[data-auth-user]");
   if (authUser && session) {
@@ -1244,7 +1394,7 @@ document.querySelector('[data-form="project-definition"]').addEventListener("sub
   }
 });
 }
-window.founderApi = { apiRequest, apiRoutes, idempotencyKey, refreshSession };
+window.camovarApi = { apiRequest, apiRoutes, idempotencyKey, refreshSession };
 initializeAuthGate();
 </script>
 </body>
